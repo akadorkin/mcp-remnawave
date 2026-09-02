@@ -7,8 +7,9 @@
 </p>
 
 > Version 2.0.0 was rewritten for the Remnawave 3.x API by Claude (Anthropic) and verified live against a 3.4.3 panel. Read the diff before trusting it with write access. / Версия 2.0.0 переписана под API Remnawave 3.x с помощью Claude (Anthropic) и проверена на живой панели 3.4.3. Прежде чем давать ей права на запись, прочитайте diff.
-> изображение certified-ai-bullshit принадлежит https://github.com/vas3k
+
 ---
+изображение certified-ai-bullshit принадлежит https://github.com/vas3k
 
 <a id="english"></a>
 
