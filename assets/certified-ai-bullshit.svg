@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1200" width="250" height="300" role="img" aria-label="Certified AI Bullshit">
+  <rect x="40" y="40" width="920" height="1120" rx="90" ry="90" fill="#fff" stroke="#000" stroke-width="40"/>
+  <path d="M60 840 H940 V1070 A70 70 0 0 1 870 1140 H130 A70 70 0 0 1 60 1070 Z" fill="#000"/>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <text x="500" y="285" font-size="170" font-weight="500" fill="#000">Certified</text>
+    <text x="500" y="775" font-size="560" font-weight="700" fill="#000" letter-spacing="10">AI</text>
+    <text x="500" y="1050" font-size="165" font-weight="700" fill="#fff" letter-spacing="6">BULLSHIT</text>
+  </g>
+</svg>
