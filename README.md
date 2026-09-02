@@ -16,10 +16,10 @@ MCP server ([Model Context Protocol](https://modelcontextprotocol.io)) providing
 
 ### Features
 
-- **186 tools** — users, nodes, hosts, subscriptions, bandwidth stats, squads, HWID, config profiles, inbounds, connections, API tokens, billing, snippets, external squads, settings, subscription page configs, node plugins, node integrations and metadata
+- **184 tools** — users, nodes, hosts, subscriptions, bandwidth stats, squads, HWID, config profiles, inbounds, connections, API tokens, billing, snippets, external squads, settings, subscription page configs, node plugins, node integrations and metadata
 - **3 resources** — real-time panel stats, node status, health checks
 - **5 prompts** — guided workflows for common tasks
-- **Readonly mode** — restrict to 90 read-only tools for safe monitoring
+- **Readonly mode** — restrict to 88 read-only tools for safe monitoring
 - **Caddy / Cloudflare Access support** — `X-Api-Key` and `CF-Access-*` headers
 - **Type-safe** — every route comes from [@remnawave/backend-contract](https://www.npmjs.com/package/@remnawave/backend-contract); `npm run build` type-checks first, so a contract bump surfaces removed routes at build time
 - **stdio transport** — works with any MCP-compatible client
@@ -70,7 +70,7 @@ The `X-Api-Key` header will be added to every request automatically.
 
 Set `REMNAWAVE_READONLY=true` to disable all write operations (create, update, delete, enable, disable, restart, revoke, reset, drop). Only read/list tools will be registered. Tools that *start* a collection job (`connections_by_user`, `connections_by_node`, `connections_geocheck`) are considered read-only: they change nothing on the panel.
 
-In readonly mode, the available tools are reduced from 186 to 90:
+In readonly mode, the available tools are reduced from 184 to 88:
 
 | Category | Available tools |
 |----------|----------------|
@@ -78,8 +78,8 @@ In readonly mode, the available tools are reduced from 186 to 90:
 | Nodes (3) | `nodes_list`, `nodes_get`, `nodes_tags_list` |
 | Hosts (3) | `hosts_list`, `hosts_get`, `hosts_tags_list` |
 | System & auth (13) | `system_stats`, `system_bandwidth_stats`, `system_nodes_metrics`, `system_nodes_statistics`, `system_stats_recap`, `system_stats_digest`, `system_http_stats`, `system_health`, `system_metadata`, `system_configuration`, `system_generate_x25519`, `auth_status`, `system_srr_matcher` |
-| Bandwidth stats (8) | `bandwidth_nodes_usage`, `bandwidth_nodes_realtime`, `bandwidth_node_users_usage`, `bandwidth_nodes_users_usage`, `bandwidth_nodes_usage_by_uuids`, `bandwidth_user_usage`, `bandwidth_squad_usage`, `bandwidth_squad_user_usage` |
-| Subscriptions & templates (13) | `subscriptions_list`, `subscriptions_get_by_id`, `subscriptions_get_by_username`, `subscriptions_get_by_short_uuid`, `subscription_info`, `subscriptions_get_raw_by_short_uuid`, `subscriptions_get_subpage_config`, `subscriptions_get_connection_keys`, `subscription_request_history_list`, `subscription_request_history_stats`, `sub_templates_list`, `sub_templates_get`, `sub_settings_get` |
+| Bandwidth stats (7) | `bandwidth_nodes_usage`, `bandwidth_node_users_usage`, `bandwidth_nodes_users_usage`, `bandwidth_nodes_usage_by_uuids`, `bandwidth_user_usage`, `bandwidth_squad_usage`, `bandwidth_squad_user_usage` |
+| Subscriptions & templates (12) | `subscriptions_list`, `subscriptions_get_by_id`, `subscriptions_get_by_username`, `subscriptions_get_by_short_uuid`, `subscription_info`, `subscriptions_get_raw_by_short_uuid`, `subscriptions_get_connection_keys`, `subscription_request_history_list`, `subscription_request_history_stats`, `sub_templates_list`, `sub_templates_get`, `sub_settings_get` |
 | Config profiles & inbounds (5) | `config_profiles_list`, `config_profiles_get`, `inbounds_list`, `config_profiles_get_inbounds`, `config_profiles_get_computed_config` |
 | Internal squads (3) | `squads_list`, `squads_get`, `squads_accessible_nodes` |
 | External squads (2) | `external_squads_list`, `external_squads_get` |
@@ -162,6 +162,13 @@ Remnawave 3.x changed its identifiers, so most user-related tool parameters chan
 New in 2.0: `users_extend`, `users_stream`, `users_accessible_nodes`, `users_subscription_request_history`, `bandwidth_*`, `system_stats_digest`, `system_http_stats`, `system_configuration`, `connections_geocheck`, `node_integrations_*`, `shared_lists_*`, `*_sync`, `api_tokens_scopes`, `sub_templates_*`, `sub_settings_get`, `hosts_reorder`, `squads_get`, `squads_reorder`.
 
 Not exposed (absent from panel 3.4.3 or unstable between 3.4.x releases): tag get/set endpoints for profiles/squads/templates, node SSH tickets, shared-list delete / get-by-name.
+
+### Notes from a live run against panel 3.4.3
+
+- Bandwidth tools accept `YYYY-MM-DD`; a full ISO timestamp is truncated to the date because the panel validates these params as `date`.
+- A token with role **API** gets `403 Forbidden` on `api_tokens_*` and `settings_*`. That is the role, not a bug.
+- `metadata_*_get` returns `404 Metadata not found` until metadata has been created for that object.
+- `connections_by_*` return a `jobId`; poll the matching `*_result` tool until `isCompleted` is true.
 
 ### Available Tools
 
@@ -252,12 +259,11 @@ Not exposed (absent from panel 3.4.3 or unstable between 3.4.x releases): tag ge
 | `auth_status` | Auth status of the panel | read |
 | `system_srr_matcher` | Test subscription response rules (SRR) against the matcher | read |
 
-#### Bandwidth stats (8 tools)
+#### Bandwidth stats (7 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
 | `bandwidth_nodes_usage` | Traffic per node for a period (top N nodes) | read |
-| `bandwidth_nodes_realtime` | Realtime traffic of nodes | read |
 | `bandwidth_node_users_usage` | Top users by traffic on one node for a period | read |
 | `bandwidth_nodes_users_usage` | Top users by traffic across several nodes for a period | read |
 | `bandwidth_nodes_usage_by_uuids` | Traffic of the given nodes for a period (optionally only nodes above minTotalBytes) | read |
@@ -265,7 +271,7 @@ Not exposed (absent from panel 3.4.3 or unstable between 3.4.x releases): tag ge
 | `bandwidth_squad_usage` | Traffic of users in an internal squad for a period (cursor paginated) | read |
 | `bandwidth_squad_user_usage` | Traffic of one user inside an internal squad for a period | read |
 
-#### Subscriptions & templates (13 tools)
+#### Subscriptions & templates (12 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
@@ -275,7 +281,6 @@ Not exposed (absent from panel 3.4.3 or unstable between 3.4.x releases): tag ge
 | `subscriptions_get_by_short_uuid` | Get subscription by short UUID | read |
 | `subscription_info` | Public subscription info (what the client app sees) by short UUID | read |
 | `subscriptions_get_raw_by_short_uuid` | Raw subscription (hosts with resolved links) by short UUID | read |
-| `subscriptions_get_subpage_config` | Subscription page config served for a short UUID | read |
 | `subscriptions_get_connection_keys` | Connection keys (links) of a user by numeric user id | read |
 | `subscription_request_history_list` | Subscription request history (paginated, filterable) | read |
 | `subscription_request_history_stats` | Subscription request history statistics | read |
@@ -498,8 +503,8 @@ src/
 │   ├── nodes.ts                       # Nodes (15)
 │   ├── hosts.ts                       # Hosts (11)
 │   ├── system.ts                      # System & auth (13)
-│   ├── bandwidth.ts                   # Bandwidth stats (8)
-│   ├── subscriptions.ts               # Subscriptions & templates (13)
+│   ├── bandwidth.ts                   # Bandwidth stats (7)
+│   ├── subscriptions.ts               # Subscriptions & templates (12)
 │   ├── inbounds.ts                    # Config profiles & inbounds (9)
 │   ├── squads.ts                      # Internal squads (11)
 │   ├── external-squads.ts             # External squads (8)
@@ -545,10 +550,10 @@ MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), п
 
 ### Возможности
 
-- **186 инструментов** — пользователи, ноды, хосты, подписки, статистика трафика, группы, HWID, конфиг-профили, inbounds, соединения, API-токены, биллинг, сниппеты, внешние группы, настройки, страницы подписок, плагины и интеграции нод, метаданные
+- **184 инструментов** — пользователи, ноды, хосты, подписки, статистика трафика, группы, HWID, конфиг-профили, inbounds, соединения, API-токены, биллинг, сниппеты, внешние группы, настройки, страницы подписок, плагины и интеграции нод, метаданные
 - **3 ресурса** — статистика панели, статус нод, проверка здоровья
 - **5 промптов** — пошаговые сценарии для типичных задач
-- **Readonly-режим** — только 90 инструментов чтения
+- **Readonly-режим** — только 88 инструментов чтения
 - **Поддержка Caddy / Cloudflare Access** — заголовки `X-Api-Key` и `CF-Access-*`
 - **Type-safe** — все маршруты берутся из [@remnawave/backend-contract](https://www.npmjs.com/package/@remnawave/backend-contract); `npm run build` сначала прогоняет проверку типов, поэтому удалённые маршруты ловятся на сборке
 - **stdio транспорт** — работает с любым MCP-совместимым клиентом
@@ -599,7 +604,7 @@ REMNAWAVE_API_KEY=ваш-caddy-api-ключ
 
 Установите `REMNAWAVE_READONLY=true`, чтобы отключить все операции записи (создание, обновление, удаление, включение, отключение, перезапуск, отзыв, сброс, drop). Инструменты, которые лишь *запускают* сбор данных (`connections_by_user`, `connections_by_node`, `connections_geocheck`), считаются инструментами чтения: на панели они ничего не меняют.
 
-В readonly-режиме доступно 90 инструментов из 186:
+В readonly-режиме доступно 88 инструментов из 184:
 
 | Категория | Доступные инструменты |
 |-----------|----------------------|
@@ -607,8 +612,8 @@ REMNAWAVE_API_KEY=ваш-caddy-api-ключ
 | Ноды (3) | `nodes_list`, `nodes_get`, `nodes_tags_list` |
 | Хосты (3) | `hosts_list`, `hosts_get`, `hosts_tags_list` |
 | Система и авторизация (13) | `system_stats`, `system_bandwidth_stats`, `system_nodes_metrics`, `system_nodes_statistics`, `system_stats_recap`, `system_stats_digest`, `system_http_stats`, `system_health`, `system_metadata`, `system_configuration`, `system_generate_x25519`, `auth_status`, `system_srr_matcher` |
-| Статистика трафика (8) | `bandwidth_nodes_usage`, `bandwidth_nodes_realtime`, `bandwidth_node_users_usage`, `bandwidth_nodes_users_usage`, `bandwidth_nodes_usage_by_uuids`, `bandwidth_user_usage`, `bandwidth_squad_usage`, `bandwidth_squad_user_usage` |
-| Подписки и шаблоны (13) | `subscriptions_list`, `subscriptions_get_by_id`, `subscriptions_get_by_username`, `subscriptions_get_by_short_uuid`, `subscription_info`, `subscriptions_get_raw_by_short_uuid`, `subscriptions_get_subpage_config`, `subscriptions_get_connection_keys`, `subscription_request_history_list`, `subscription_request_history_stats`, `sub_templates_list`, `sub_templates_get`, `sub_settings_get` |
+| Статистика трафика (7) | `bandwidth_nodes_usage`, `bandwidth_node_users_usage`, `bandwidth_nodes_users_usage`, `bandwidth_nodes_usage_by_uuids`, `bandwidth_user_usage`, `bandwidth_squad_usage`, `bandwidth_squad_user_usage` |
+| Подписки и шаблоны (12) | `subscriptions_list`, `subscriptions_get_by_id`, `subscriptions_get_by_username`, `subscriptions_get_by_short_uuid`, `subscription_info`, `subscriptions_get_raw_by_short_uuid`, `subscriptions_get_connection_keys`, `subscription_request_history_list`, `subscription_request_history_stats`, `sub_templates_list`, `sub_templates_get`, `sub_settings_get` |
 | Конфиг-профили и inbounds (5) | `config_profiles_list`, `config_profiles_get`, `inbounds_list`, `config_profiles_get_inbounds`, `config_profiles_get_computed_config` |
 | Внутренние группы (squads) (3) | `squads_list`, `squads_get`, `squads_accessible_nodes` |
 | Внешние группы (2) | `external_squads_list`, `external_squads_get` |
@@ -692,6 +697,13 @@ Remnawave 3.x поменял идентификаторы, поэтому изм
 
 Не вынесено в инструменты (нет в панели 3.4.3 или меняется между релизами 3.4.x): get/set тегов для профилей/групп/шаблонов, SSH-тикеты нод, удаление и поиск по имени для shared-lists.
 
+### Заметки по живому прогону на панели 3.4.3
+
+- Bandwidth-инструменты принимают `YYYY-MM-DD`; полный ISO-таймстамп обрезается до даты, потому что панель валидирует эти параметры как `date`.
+- Токен с ролью **API** получает `403 Forbidden` на `api_tokens_*` и `settings_*`. Это роль токена, не ошибка сервера.
+- `metadata_*_get` отвечает `404 Metadata not found`, пока метаданные для объекта не созданы.
+- `connections_by_*` возвращают `jobId`; результат забирается соответствующим `*_result`, пока `isCompleted` не станет true.
+
 ### Доступные инструменты
 
 Полный перечень с описаниями — в разделе [Available Tools](#available-tools) выше. Сводка по категориям:
@@ -702,8 +714,8 @@ Remnawave 3.x поменял идентификаторы, поэтому изм
 | Ноды | 15 | 3 |
 | Хосты | 11 | 3 |
 | Система и авторизация | 13 | 13 |
-| Статистика трафика | 8 | 8 |
-| Подписки и шаблоны | 13 | 13 |
+| Статистика трафика | 7 | 7 |
+| Подписки и шаблоны | 12 | 12 |
 | Конфиг-профили и inbounds | 9 | 5 |
 | Внутренние группы | 11 | 3 |
 | Внешние группы | 8 | 2 |
@@ -766,8 +778,8 @@ src/
 │   ├── nodes.ts                       # Ноды (15)
 │   ├── hosts.ts                       # Хосты (11)
 │   ├── system.ts                      # Система и авторизация (13)
-│   ├── bandwidth.ts                   # Статистика трафика (8)
-│   ├── subscriptions.ts               # Подписки и шаблоны (13)
+│   ├── bandwidth.ts                   # Статистика трафика (7)
+│   ├── subscriptions.ts               # Подписки и шаблоны (12)
 │   ├── inbounds.ts                    # Конфиг-профили и inbounds (9)
 │   ├── squads.ts                      # Внутренние группы (squads) (11)
 │   ├── external-squads.ts             # Внешние группы (8)

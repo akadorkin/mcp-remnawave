@@ -315,9 +315,6 @@ export class RemnawaveClient {
             withDisabledHosts: withDisabledHosts === undefined ? undefined : String(withDisabledHosts),
         });
     }
-    getSubscriptionSubpageConfig(shortUuid: string) {
-        return this.get(REST_API.SUBSCRIPTIONS.SUBPAGE.GET_CONFIG(shortUuid));
-    }
     getConnectionKeysByUserId(userId: number) {
         return this.get(REST_API.SUBSCRIPTIONS.GET_CONNECTION_KEYS_BY_USER_ID(String(userId)));
     }
@@ -471,9 +468,6 @@ export class RemnawaveClient {
 
     getNodesUsage(query: Params) {
         return this.get(REST_API.BANDWIDTH_STATS.NODES.GET, query);
-    }
-    getNodesRealtimeUsage() {
-        return this.get(REST_API.BANDWIDTH_STATS.NODES.GET_REALTIME);
     }
     getNodeUsersUsage(uuid: string, query: Params) {
         return this.get(REST_API.BANDWIDTH_STATS.NODES.GET_USERS(uuid), query);

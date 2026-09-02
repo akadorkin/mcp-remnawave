@@ -34,10 +34,6 @@ export function registerSubscriptionTools(server: McpServer, client: RemnawaveCl
         ({ shortUuid, withDisabledHosts }) => run(() => client.getSubscriptionByShortUuidRaw(shortUuid, withDisabledHosts)),
     );
 
-    server.tool('subscriptions_get_subpage_config', 'Subscription page config served for a short UUID', { shortUuid: z.string() }, ({ shortUuid }) =>
-        run(() => client.getSubscriptionSubpageConfig(shortUuid)),
-    );
-
     server.tool('subscriptions_get_connection_keys', 'Connection keys (links) of a user by numeric user id', { userId: z.number().int() }, ({ userId }) =>
         run(() => client.getConnectionKeysByUserId(userId)),
     );
