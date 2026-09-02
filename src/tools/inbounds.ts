@@ -109,6 +109,10 @@ export function registerInboundTools(
         {
             uuid: z.string().describe('Profile UUID'),
             name: z.string().optional().describe('New name'),
+            config: z
+                .record(z.unknown())
+                .optional()
+                .describe('Full xray configuration object; replaces the stored one'),
         },
         async (params) => {
             try {
