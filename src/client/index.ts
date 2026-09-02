@@ -1,6 +1,14 @@
 import { REST_API } from '@remnawave/backend-contract';
 import { Config } from '../config.js';
 
+type Params = Record<string, unknown>;
+type Query = Record<string, unknown> | undefined;
+
+/**
+ * Thin HTTP client over the Remnawave REST API (panel 3.4+).
+ * All paths come from @remnawave/backend-contract so a contract bump
+ * surfaces removed or renamed routes as type errors at build time.
+ */
 export class RemnawaveClient {
     private baseUrl: string;
     private headers: Record<string, string>;
@@ -22,744 +30,686 @@ export class RemnawaveClient {
         }
     }
 
+    /** Serialise a query object; arrays/objects are JSON-encoded (panel expects `filters=[...]`). */
+    private qs(query: Query): string {
+        if (!query) return '';
+        const p = new URLSearchParams();
+        for (const [k, v] of Object.entries(query)) {
+            if (v === undefined || v === null) continue;
+            p.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+        }
+        const s = p.toString();
+        return s ? `?${s}` : '';
+    }
+
     private async request<T = unknown>(
         method: string,
         path: string,
         body?: unknown,
+        query?: Query,
     ): Promise<T> {
-        const url = `${this.baseUrl}${path}`;
-        const options: RequestInit = {
-            method,
-            headers: this.headers,
-        };
+        const url = `${this.baseUrl}${path}${this.qs(query)}`;
+        const options: RequestInit = { method, headers: this.headers };
         if (body !== undefined) {
             options.body = JSON.stringify(body);
         }
         const res = await fetch(url, options);
-        if (!res.ok) {
-            let errorMessage: string;
+        const text = await res.text();
+        let parsed: unknown = undefined;
+        if (text) {
             try {
-                const errorBody = await res.json();
-                errorMessage =
-                    (errorBody as { message?: string }).message ||
-                    JSON.stringify(errorBody);
+                parsed = JSON.parse(text);
             } catch {
-                errorMessage = `HTTP ${res.status} ${res.statusText}`;
+                parsed = text;
             }
-            throw new Error(`Remnawave API error: ${errorMessage}`);
         }
-        return res.json() as Promise<T>;
+        if (!res.ok) {
+            const msg =
+                parsed && typeof parsed === 'object' && 'message' in parsed
+                    ? String((parsed as { message: unknown }).message)
+                    : text || `HTTP ${res.status} ${res.statusText}`;
+            throw new Error(`Remnawave API error (${res.status} ${method} ${path}): ${msg}`);
+        }
+        return parsed as T;
     }
 
-    private async get<T = unknown>(path: string): Promise<T> {
-        return this.request<T>('GET', path);
+    private get<T = unknown>(path: string, query?: Query) {
+        return this.request<T>('GET', path, undefined, query);
     }
-
-    private async post<T = unknown>(path: string, body?: unknown): Promise<T> {
-        return this.request<T>('POST', path, body);
+    private post<T = unknown>(path: string, body?: unknown, query?: Query) {
+        return this.request<T>('POST', path, body, query);
     }
-
-    private async patch<T = unknown>(
-        path: string,
-        body?: unknown,
-    ): Promise<T> {
+    private patch<T = unknown>(path: string, body?: unknown) {
         return this.request<T>('PATCH', path, body);
     }
-
-    private async put<T = unknown>(path: string, body?: unknown): Promise<T> {
+    private put<T = unknown>(path: string, body?: unknown) {
         return this.request<T>('PUT', path, body);
     }
-
-    private async delete<T = unknown>(path: string): Promise<T> {
-        return this.request<T>('DELETE', path);
+    private delete<T = unknown>(path: string, body?: unknown) {
+        return this.request<T>('DELETE', path, body);
     }
 
-    // Users
+    // ---------------------------------------------------------------- Users
 
-    async getUsers(start = 0, size = 25) {
-        return this.get(
-            `${REST_API.USERS.GET}?start=${start}&size=${size}`,
-        );
+    getUsers(query: Params = {}) {
+        return this.get(REST_API.USERS.GET, query);
     }
-
-    async getUserByUuid(uuid: string) {
-        return this.get(REST_API.USERS.GET_BY_UUID(uuid));
+    streamUsers(query: Params = {}) {
+        return this.get(REST_API.USERS.STREAM, query);
     }
-
-    async getUserByUsername(username: string) {
+    getUserById(id: number) {
+        return this.get(REST_API.USERS.GET_BY_ID(String(id)));
+    }
+    getUserByUsername(username: string) {
         return this.get(REST_API.USERS.GET_BY.USERNAME(username));
     }
-
-    async getUserByShortUuid(shortUuid: string) {
+    getUserByShortUuid(shortUuid: string) {
         return this.get(REST_API.USERS.GET_BY.SHORT_UUID(shortUuid));
     }
-
-    async getUserByTelegramId(telegramId: string) {
-        return this.get(REST_API.USERS.GET_BY.TELEGRAM_ID(telegramId));
-    }
-
-    async getUserByEmail(email: string) {
-        return this.get(REST_API.USERS.GET_BY.EMAIL(email));
-    }
-
-    async getUserByTag(tag: string) {
-        return this.get(REST_API.USERS.GET_BY.TAG(tag));
-    }
-
-    async getUserById(id: string) {
-        return this.get(REST_API.USERS.GET_BY.ID(id));
-    }
-
-    async getUserBySubscriptionUuid(subscriptionUuid: string) {
-        return this.get(REST_API.USERS.GET_BY.SUBSCRIPTION_UUID(subscriptionUuid));
-    }
-
-    async getUserTags() {
+    getUserTags() {
         return this.get(REST_API.USERS.TAGS.GET);
     }
-
-    async resolveUsers(params: Record<string, unknown>) {
+    resolveUsers(params: Params) {
         return this.post(REST_API.USERS.RESOLVE, params);
     }
-
-    async createUser(params: Record<string, unknown>) {
+    getUserAccessibleNodes(id: number) {
+        return this.get(REST_API.USERS.ACCESSIBLE_NODES(String(id)));
+    }
+    getUserSubscriptionRequestHistory(id: number) {
+        return this.get(REST_API.USERS.SUBSCRIPTION_REQUEST_HISTORY(String(id)));
+    }
+    createUser(params: Params) {
         return this.post(REST_API.USERS.CREATE, params);
     }
-
-    async updateUser(params: Record<string, unknown>) {
+    updateUser(params: Params) {
         return this.patch(REST_API.USERS.UPDATE, params);
     }
-
-    async deleteUser(uuid: string) {
-        return this.delete(REST_API.USERS.DELETE(uuid));
+    deleteUser(id: number) {
+        return this.delete(REST_API.USERS.DELETE(String(id)));
     }
-
-    async enableUser(uuid: string) {
-        return this.post(REST_API.USERS.ACTIONS.ENABLE(uuid));
+    enableUser(id: number) {
+        return this.post(REST_API.USERS.ACTIONS.ENABLE(String(id)));
     }
-
-    async disableUser(uuid: string) {
-        return this.post(REST_API.USERS.ACTIONS.DISABLE(uuid));
+    disableUser(id: number) {
+        return this.post(REST_API.USERS.ACTIONS.DISABLE(String(id)));
     }
-
-    async revokeUserSubscription(uuid: string) {
-        return this.post(REST_API.USERS.ACTIONS.REVOKE_SUBSCRIPTION(uuid));
+    revokeUserSubscription(id: number, params: Params = {}) {
+        return this.post(REST_API.USERS.ACTIONS.REVOKE_SUBSCRIPTION(String(id)), params);
     }
-
-    async resetUserTraffic(uuid: string) {
-        return this.post(REST_API.USERS.ACTIONS.RESET_TRAFFIC(uuid));
+    resetUserTraffic(id: number) {
+        return this.post(REST_API.USERS.ACTIONS.RESET_TRAFFIC(String(id)));
     }
-
-    async bulkDeleteUsersByStatus(params: Record<string, unknown>) {
+    extendUser(id: number, days: number) {
+        return this.post(REST_API.USERS.ACTIONS.EXTEND_EXPIRATION_DATE(String(id)), { days });
+    }
+    bulkDeleteUsersByStatus(params: Params) {
         return this.post(REST_API.USERS.BULK.DELETE_BY_STATUS, params);
     }
-
-    async bulkUpdateUsers(params: Record<string, unknown>) {
+    bulkUpdateUsers(params: Params) {
         return this.post(REST_API.USERS.BULK.UPDATE, params);
     }
-
-    async bulkResetUsersTraffic(params: Record<string, unknown>) {
+    bulkResetUsersTraffic(params: Params) {
         return this.post(REST_API.USERS.BULK.RESET_TRAFFIC, params);
     }
-
-    async bulkRevokeUsersSubscription(params: Record<string, unknown>) {
+    bulkRevokeUsersSubscription(params: Params) {
         return this.post(REST_API.USERS.BULK.REVOKE_SUBSCRIPTION, params);
     }
-
-    async bulkDeleteUsers(params: Record<string, unknown>) {
+    bulkDeleteUsers(params: Params) {
         return this.post(REST_API.USERS.BULK.DELETE, params);
     }
-
-    async bulkUpdateUserSquads(params: Record<string, unknown>) {
+    bulkUpdateUserSquads(params: Params) {
         return this.post(REST_API.USERS.BULK.UPDATE_SQUADS, params);
     }
-
-    async bulkExtendUsersExpiration(params: Record<string, unknown>) {
+    bulkExtendUsersExpiration(params: Params) {
         return this.post(REST_API.USERS.BULK.EXTEND_EXPIRATION_DATE, params);
     }
-
-    async bulkAllUpdateUsers(params: Record<string, unknown>) {
+    bulkAllUpdateUsers(params: Params) {
         return this.post(REST_API.USERS.BULK.ALL.UPDATE, params);
     }
-
-    async bulkAllResetUsersTraffic() {
+    bulkAllResetUsersTraffic() {
         return this.post(REST_API.USERS.BULK.ALL.RESET_TRAFFIC);
     }
-
-    async bulkAllExtendUsersExpiration(params: Record<string, unknown>) {
+    bulkAllExtendUsersExpiration(params: Params) {
         return this.post(REST_API.USERS.BULK.ALL.EXTEND_EXPIRATION_DATE, params);
     }
 
-    // Nodes
+    // ---------------------------------------------------------------- Nodes
 
-    async getNodes() {
+    getNodes() {
         return this.get(REST_API.NODES.GET);
     }
-
-    async getNodeByUuid(uuid: string) {
+    getNodeByUuid(uuid: string) {
         return this.get(REST_API.NODES.GET_BY_UUID(uuid));
     }
-
-    async getNodeTags() {
+    getNodeTags() {
         return this.get(REST_API.NODES.TAGS.GET);
     }
-
-    async createNode(params: Record<string, unknown>) {
+    createNode(params: Params) {
         return this.post(REST_API.NODES.CREATE, params);
     }
-
-    async updateNode(params: Record<string, unknown>) {
+    updateNode(params: Params) {
         return this.patch(REST_API.NODES.UPDATE, params);
     }
-
-    async deleteNode(uuid: string) {
+    deleteNode(uuid: string) {
         return this.delete(REST_API.NODES.DELETE(uuid));
     }
-
-    async enableNode(uuid: string) {
+    enableNode(uuid: string) {
         return this.post(REST_API.NODES.ACTIONS.ENABLE(uuid));
     }
-
-    async disableNode(uuid: string) {
+    disableNode(uuid: string) {
         return this.post(REST_API.NODES.ACTIONS.DISABLE(uuid));
     }
-
-    async restartNode(uuid: string) {
-        return this.post(REST_API.NODES.ACTIONS.RESTART(uuid));
+    restartNode(uuid: string, forceRestart = false) {
+        return this.post(REST_API.NODES.ACTIONS.RESTART(uuid), { forceRestart });
     }
-
-    async restartAllNodes() {
-        return this.post(REST_API.NODES.ACTIONS.RESTART_ALL);
+    restartAllNodes(forceRestart = false) {
+        return this.post(REST_API.NODES.ACTIONS.RESTART_ALL, { forceRestart });
     }
-
-    async resetNodeTraffic(uuid: string) {
+    resetNodeTraffic(uuid: string) {
         return this.post(REST_API.NODES.ACTIONS.RESET_TRAFFIC(uuid));
     }
-
-    async reorderNodes(nodes: Array<{ viewPosition: number; uuid: string }>) {
+    reorderNodes(nodes: Array<{ viewPosition: number; uuid: string }>) {
         return this.post(REST_API.NODES.ACTIONS.REORDER, { nodes });
     }
-
-    async bulkNodeProfileModification(params: Record<string, unknown>) {
+    bulkNodeProfileModification(params: Params) {
         return this.post(REST_API.NODES.BULK_ACTIONS.PROFILE_MODIFICATION, params);
     }
-
-    async bulkNodeActions(params: Record<string, unknown>) {
+    bulkNodeActions(params: Params) {
         return this.post(REST_API.NODES.BULK_ACTIONS.ACTIONS, params);
     }
-
-    async bulkUpdateNodes(params: Record<string, unknown>) {
+    bulkUpdateNodes(params: Params) {
         return this.post(REST_API.NODES.BULK_ACTIONS.UPDATE, params);
     }
 
-    // Hosts
+    // ---------------------------------------------------------------- Hosts
 
-    async getHosts() {
+    getHosts() {
         return this.get(REST_API.HOSTS.GET);
     }
-
-    async getHostByUuid(uuid: string) {
+    getHostByUuid(uuid: string) {
         return this.get(REST_API.HOSTS.GET_BY_UUID(uuid));
     }
-
-    async getHostTags() {
+    getHostTags() {
         return this.get(REST_API.HOSTS.TAGS.GET);
     }
-
-    async createHost(params: Record<string, unknown>) {
+    createHost(params: Params) {
         return this.post(REST_API.HOSTS.CREATE, params);
     }
-
-    async updateHost(params: Record<string, unknown>) {
+    updateHost(params: Params) {
         return this.patch(REST_API.HOSTS.UPDATE, params);
     }
-
-    async deleteHost(uuid: string) {
+    deleteHost(uuid: string) {
         return this.delete(REST_API.HOSTS.DELETE(uuid));
     }
-
-    async bulkEnableHosts(params: Record<string, unknown>) {
+    reorderHosts(hosts: Array<{ viewPosition: number; uuid: string }>) {
+        return this.post(REST_API.HOSTS.ACTIONS.REORDER, { hosts });
+    }
+    bulkEnableHosts(params: Params) {
         return this.post(REST_API.HOSTS.BULK.ENABLE_HOSTS, params);
     }
-
-    async bulkDisableHosts(params: Record<string, unknown>) {
+    bulkDisableHosts(params: Params) {
         return this.post(REST_API.HOSTS.BULK.DISABLE_HOSTS, params);
     }
-
-    async bulkDeleteHosts(params: Record<string, unknown>) {
+    bulkDeleteHosts(params: Params) {
         return this.post(REST_API.HOSTS.BULK.DELETE_HOSTS, params);
     }
-
-    async bulkSetHostInbound(params: Record<string, unknown>) {
-        return this.post(REST_API.HOSTS.BULK.SET_INBOUND, params);
+    bulkUpdateHosts(params: Params) {
+        return this.patch(REST_API.HOSTS.BULK.UPDATE, params);
     }
 
-    async bulkSetHostPort(params: Record<string, unknown>) {
-        return this.post(REST_API.HOSTS.BULK.SET_PORT, params);
-    }
+    // ---------------------------------------------------------------- System
 
-    // System
-
-    async getStats() {
+    getStats() {
         return this.get(REST_API.SYSTEM.STATS.SYSTEM_STATS);
     }
-
-    async getBandwidthStats() {
+    getBandwidthStats() {
         return this.get(REST_API.SYSTEM.STATS.BANDWIDTH_STATS);
     }
-
-    async getNodesMetrics() {
+    getNodesMetrics() {
         return this.get(REST_API.SYSTEM.STATS.NODES_METRICS);
     }
-
-    async getNodesStatistics() {
+    getNodesStatistics() {
         return this.get(REST_API.SYSTEM.STATS.NODES_STATS);
     }
-
-    async getStatsRecap() {
+    getStatsRecap() {
         return this.get(REST_API.SYSTEM.STATS.RECAP);
     }
-
-    async getHealth() {
+    getStatsDigest(start: string, end: string) {
+        return this.get(REST_API.SYSTEM.STATS.DIGEST, { start, end });
+    }
+    getHttpStats() {
+        return this.get(REST_API.SYSTEM.STATS.HTTP);
+    }
+    getHealth() {
         return this.get(REST_API.SYSTEM.HEALTH);
     }
-
-    async getSystemMetadata() {
+    getSystemMetadata() {
         return this.get(REST_API.SYSTEM.METADATA);
     }
-
-    async generateX25519() {
+    getConfiguration() {
+        return this.get(REST_API.SYSTEM.CONFIGURATION);
+    }
+    generateX25519() {
         return this.get(REST_API.SYSTEM.TOOLS.GENERATE_X25519);
     }
-
-    async testSrrMatcher(params: Record<string, unknown>) {
+    testSrrMatcher(params: Params) {
         return this.post(REST_API.SYSTEM.TESTERS.SRR_MATCHER, params);
     }
 
-    // Subscriptions
+    // ---------------------------------------------------------------- Subscriptions
 
-    async getSubscriptions(start = 0, size = 25) {
-        return this.get(
-            `${REST_API.SUBSCRIPTIONS.GET}?start=${start}&size=${size}`,
-        );
+    getSubscriptions(start = 0, size = 25) {
+        return this.get(REST_API.SUBSCRIPTIONS.GET, { start, size });
     }
-
-    async getSubscriptionByUuid(uuid: string) {
-        return this.get(REST_API.SUBSCRIPTIONS.GET_BY.UUID(uuid));
+    getSubscriptionById(userId: number) {
+        return this.get(REST_API.SUBSCRIPTIONS.GET_BY.ID(String(userId)));
     }
-
-    async getSubscriptionByUsername(username: string) {
+    getSubscriptionByUsername(username: string) {
         return this.get(REST_API.SUBSCRIPTIONS.GET_BY.USERNAME(username));
     }
-
-    async getSubscriptionByShortUuid(shortUuid: string) {
+    getSubscriptionByShortUuid(shortUuid: string) {
         return this.get(REST_API.SUBSCRIPTIONS.GET_BY.SHORT_UUID(shortUuid));
     }
-
-    async getSubscriptionByShortUuidRaw(shortUuid: string) {
-        return this.get(REST_API.SUBSCRIPTIONS.GET_BY.SHORT_UUID_RAW(shortUuid));
+    getSubscriptionByShortUuidRaw(shortUuid: string, withDisabledHosts?: boolean) {
+        return this.get(REST_API.SUBSCRIPTIONS.GET_BY.SHORT_UUID_RAW(shortUuid), {
+            withDisabledHosts: withDisabledHosts === undefined ? undefined : String(withDisabledHosts),
+        });
     }
-
-    async getSubscriptionSubpageConfig(shortUuid: string) {
+    getSubscriptionSubpageConfig(shortUuid: string) {
         return this.get(REST_API.SUBSCRIPTIONS.SUBPAGE.GET_CONFIG(shortUuid));
     }
-
-    async getConnectionKeysByUuid(uuid: string) {
-        return this.get(REST_API.SUBSCRIPTIONS.GET_CONNECTION_KEYS_BY_UUID(uuid));
+    getConnectionKeysByUserId(userId: number) {
+        return this.get(REST_API.SUBSCRIPTIONS.GET_CONNECTION_KEYS_BY_USER_ID(String(userId)));
     }
-
-    async getSubscriptionInfo(shortUuid: string) {
+    getSubscriptionInfo(shortUuid: string) {
         return this.get(REST_API.SUBSCRIPTION.GET_INFO(shortUuid));
     }
-
-    async getSubscriptionRequestHistory() {
-        return this.get(REST_API.SUBSCRIPTION_REQUEST_HISTORY.GET);
+    getSubscriptionRequestHistory(query: Params = {}) {
+        return this.get(REST_API.SUBSCRIPTION_REQUEST_HISTORY.GET, query);
     }
-
-    async getSubscriptionRequestHistoryStats() {
+    getSubscriptionRequestHistoryStats() {
         return this.get(REST_API.SUBSCRIPTION_REQUEST_HISTORY.STATS);
     }
 
-    // Config Profiles / Inbounds
+    // ---------------------------------------------------------------- Subscription templates / settings
 
-    async getConfigProfiles() {
+    getSubscriptionTemplates() {
+        return this.get(REST_API.SUBSCRIPTION_TEMPLATE.GET_ALL);
+    }
+    getSubscriptionTemplate(uuid: string) {
+        return this.get(REST_API.SUBSCRIPTION_TEMPLATE.GET(uuid));
+    }
+    getSubscriptionSettings() {
+        return this.get(REST_API.SUBSCRIPTION_SETTINGS.GET);
+    }
+    updateSubscriptionSettings(params: Params) {
+        return this.patch(REST_API.SUBSCRIPTION_SETTINGS.UPDATE, params);
+    }
+
+    // ---------------------------------------------------------------- Config profiles / inbounds
+
+    getConfigProfiles() {
         return this.get(REST_API.CONFIG_PROFILES.GET);
     }
-
-    async getConfigProfileByUuid(uuid: string) {
+    getConfigProfileByUuid(uuid: string) {
         return this.get(REST_API.CONFIG_PROFILES.GET_BY_UUID(uuid));
     }
-
-    async getAllInbounds() {
+    getAllInbounds() {
         return this.get(REST_API.CONFIG_PROFILES.GET_ALL_INBOUNDS);
     }
-
-    async getInboundsByProfileUuid(uuid: string) {
+    getInboundsByProfileUuid(uuid: string) {
         return this.get(REST_API.CONFIG_PROFILES.GET_INBOUNDS_BY_PROFILE_UUID(uuid));
     }
-
-    async getComputedConfigByProfileUuid(uuid: string) {
+    getComputedConfigByProfileUuid(uuid: string) {
         return this.get(REST_API.CONFIG_PROFILES.GET_COMPUTED_CONFIG_BY_PROFILE_UUID(uuid));
     }
-
-    async createConfigProfile(params: Record<string, unknown>) {
+    createConfigProfile(params: Params) {
         return this.post(REST_API.CONFIG_PROFILES.CREATE, params);
     }
-
-    async updateConfigProfile(params: Record<string, unknown>) {
+    updateConfigProfile(params: Params) {
         return this.patch(REST_API.CONFIG_PROFILES.UPDATE, params);
     }
-
-    async deleteConfigProfile(uuid: string) {
+    deleteConfigProfile(uuid: string) {
         return this.delete(REST_API.CONFIG_PROFILES.DELETE(uuid));
     }
-
-    async reorderConfigProfiles(params: Record<string, unknown>) {
+    reorderConfigProfiles(params: Params) {
         return this.post(REST_API.CONFIG_PROFILES.ACTIONS.REORDER, params);
     }
 
-    // Internal Squads
+    // ---------------------------------------------------------------- Internal squads
 
-    async getInternalSquads() {
+    getInternalSquads() {
         return this.get(REST_API.INTERNAL_SQUADS.GET);
     }
-
-    async getSquadAccessibleNodes(uuid: string) {
+    getInternalSquadByUuid(uuid: string) {
+        return this.get(REST_API.INTERNAL_SQUADS.GET_BY_UUID(uuid));
+    }
+    getSquadAccessibleNodes(uuid: string) {
         return this.get(REST_API.INTERNAL_SQUADS.ACCESSIBLE_NODES(uuid));
     }
-
-    async createInternalSquad(params: Record<string, unknown>) {
+    createInternalSquad(params: Params) {
         return this.post(REST_API.INTERNAL_SQUADS.CREATE, params);
     }
-
-    async updateInternalSquad(params: Record<string, unknown>) {
+    updateInternalSquad(params: Params) {
         return this.patch(REST_API.INTERNAL_SQUADS.UPDATE, params);
     }
-
-    async deleteInternalSquad(uuid: string) {
+    deleteInternalSquad(uuid: string) {
         return this.delete(REST_API.INTERNAL_SQUADS.DELETE(uuid));
     }
-
-    async addUsersToSquad(squadUuid: string, userUuids: string[]) {
-        return this.post(
-            REST_API.INTERNAL_SQUADS.BULK_ACTIONS.ADD_USERS(squadUuid),
-            { userUuids },
-        );
+    reorderInternalSquads(params: Params) {
+        return this.post(REST_API.INTERNAL_SQUADS.ACTIONS.REORDER, params);
+    }
+    /** Adds EVERY user of the panel to the squad (panel semantics of `add-users`). */
+    addAllUsersToSquad(squadUuid: string) {
+        return this.post(REST_API.INTERNAL_SQUADS.BULK_ACTIONS.ADD_USERS(squadUuid));
+    }
+    /** Removes EVERY user from the squad. */
+    removeAllUsersFromSquad(squadUuid: string) {
+        return this.delete(REST_API.INTERNAL_SQUADS.BULK_ACTIONS.REMOVE_USERS(squadUuid));
+    }
+    addUsersToSquad(squadUuid: string, userIds: number[]) {
+        return this.post(REST_API.INTERNAL_SQUADS.BULK_ACTIONS.ADD_MANY_USERS(squadUuid), { userIds });
+    }
+    removeUsersFromSquad(squadUuid: string, userIds: number[]) {
+        return this.delete(REST_API.INTERNAL_SQUADS.BULK_ACTIONS.REMOVE_MANY_USERS(squadUuid), { userIds });
     }
 
-    async removeUsersFromSquad(squadUuid: string, userUuids: string[]) {
-        return this.post(
-            REST_API.INTERNAL_SQUADS.BULK_ACTIONS.REMOVE_USERS(squadUuid),
-            { userUuids },
-        );
-    }
+    // ---------------------------------------------------------------- External squads
 
-    // HWID
-
-    async getUserHwidDevices(userUuid: string) {
-        return this.get(REST_API.HWID.GET_USER_HWID_DEVICES(userUuid));
-    }
-
-    async getAllHwidDevices() {
-        return this.get(REST_API.HWID.GET_ALL_HWID_DEVICES);
-    }
-
-    async getHwidStats() {
-        return this.get(REST_API.HWID.STATS);
-    }
-
-    async getHwidTopUsers() {
-        return this.get(REST_API.HWID.TOP_USERS_BY_DEVICES);
-    }
-
-    async createUserHwidDevice(params: Record<string, unknown>) {
-        return this.post(REST_API.HWID.CREATE_USER_HWID_DEVICE, params);
-    }
-
-    async deleteHwidDevice(userUuid: string, hwid: string) {
-        return this.post(REST_API.HWID.DELETE_USER_HWID_DEVICE, {
-            userUuid,
-            hwid,
-        });
-    }
-
-    async deleteAllUserHwidDevices(userUuid: string) {
-        return this.post(REST_API.HWID.DELETE_ALL_USER_HWID_DEVICES, {
-            userUuid,
-        });
-    }
-
-    // Bandwidth Stats
-
-    async getNodesBandwidth() {
-        return this.get(REST_API.BANDWIDTH_STATS.NODES.GET);
-    }
-
-    async getNodesRealtimeBandwidth() {
-        return this.get(REST_API.BANDWIDTH_STATS.NODES.GET_REALTIME);
-    }
-
-    async getUserBandwidthByUuid(uuid: string) {
-        return this.get(REST_API.BANDWIDTH_STATS.USERS.GET_BY_UUID(uuid));
-    }
-
-    // Auth
-
-    async getAuthStatus() {
-        return this.get(REST_API.AUTH.GET_STATUS);
-    }
-
-    // API Tokens
-
-    async getApiTokens() {
-        return this.get(REST_API.API_TOKENS.GET);
-    }
-
-    async createApiToken(params: Record<string, unknown>) {
-        return this.post(REST_API.API_TOKENS.CREATE, params);
-    }
-
-    async deleteApiToken(uuid: string) {
-        return this.delete(REST_API.API_TOKENS.DELETE(uuid));
-    }
-
-    // Keygen
-
-    async getKeygen() {
-        return this.get(REST_API.KEYGEN.GET);
-    }
-
-    // Infra Billing
-
-    async getBillingProviders() {
-        return this.get(REST_API.INFRA_BILLING.GET_PROVIDERS);
-    }
-
-    async getBillingProviderByUuid(uuid: string) {
-        return this.get(REST_API.INFRA_BILLING.GET_PROVIDER_BY_UUID(uuid));
-    }
-
-    async createBillingProvider(params: Record<string, unknown>) {
-        return this.post(REST_API.INFRA_BILLING.CREATE_PROVIDER, params);
-    }
-
-    async updateBillingProvider(params: Record<string, unknown>) {
-        return this.patch(REST_API.INFRA_BILLING.UPDATE_PROVIDER, params);
-    }
-
-    async deleteBillingProvider(uuid: string) {
-        return this.delete(REST_API.INFRA_BILLING.DELETE_PROVIDER(uuid));
-    }
-
-    async getBillingNodes() {
-        return this.get(REST_API.INFRA_BILLING.GET_BILLING_NODES);
-    }
-
-    async createBillingNode(params: Record<string, unknown>) {
-        return this.post(REST_API.INFRA_BILLING.CREATE_BILLING_NODE, params);
-    }
-
-    async updateBillingNode(params: Record<string, unknown>) {
-        return this.patch(REST_API.INFRA_BILLING.UPDATE_BILLING_NODE, params);
-    }
-
-    async deleteBillingNode(uuid: string) {
-        return this.delete(REST_API.INFRA_BILLING.DELETE_BILLING_NODE(uuid));
-    }
-
-    async getBillingHistory() {
-        return this.get(REST_API.INFRA_BILLING.GET_BILLING_HISTORY);
-    }
-
-    async createBillingHistory(params: Record<string, unknown>) {
-        return this.post(REST_API.INFRA_BILLING.CREATE_BILLING_HISTORY, params);
-    }
-
-    async deleteBillingHistory(uuid: string) {
-        return this.delete(REST_API.INFRA_BILLING.DELETE_BILLING_HISTORY(uuid));
-    }
-
-    // Snippets
-
-    async getSnippets() {
-        return this.get(REST_API.SNIPPETS.GET);
-    }
-
-    async createSnippet(params: Record<string, unknown>) {
-        return this.post(REST_API.SNIPPETS.CREATE, params);
-    }
-
-    async updateSnippet(params: Record<string, unknown>) {
-        return this.patch(REST_API.SNIPPETS.UPDATE, params);
-    }
-
-    async deleteSnippet(params: Record<string, unknown>) {
-        return this.post(REST_API.SNIPPETS.DELETE, params);
-    }
-
-    // External Squads
-
-    async getExternalSquads() {
+    getExternalSquads() {
         return this.get(REST_API.EXTERNAL_SQUADS.GET);
     }
-
-    async getExternalSquadByUuid(uuid: string) {
+    getExternalSquadByUuid(uuid: string) {
         return this.get(REST_API.EXTERNAL_SQUADS.GET_BY_UUID(uuid));
     }
-
-    async createExternalSquad(params: Record<string, unknown>) {
+    createExternalSquad(params: Params) {
         return this.post(REST_API.EXTERNAL_SQUADS.CREATE, params);
     }
-
-    async updateExternalSquad(params: Record<string, unknown>) {
+    updateExternalSquad(params: Params) {
         return this.patch(REST_API.EXTERNAL_SQUADS.UPDATE, params);
     }
-
-    async deleteExternalSquad(uuid: string) {
+    deleteExternalSquad(uuid: string) {
         return this.delete(REST_API.EXTERNAL_SQUADS.DELETE(uuid));
     }
-
-    async addUsersToExternalSquad(squadUuid: string, userUuids: string[]) {
-        return this.post(
-            REST_API.EXTERNAL_SQUADS.BULK_ACTIONS.ADD_USERS(squadUuid),
-            { userUuids },
-        );
+    /** Assigns EVERY user of the panel to the external squad. */
+    addAllUsersToExternalSquad(squadUuid: string) {
+        return this.post(REST_API.EXTERNAL_SQUADS.BULK_ACTIONS.ADD_USERS(squadUuid));
     }
-
-    async removeUsersFromExternalSquad(squadUuid: string, userUuids: string[]) {
-        return this.post(
-            REST_API.EXTERNAL_SQUADS.BULK_ACTIONS.REMOVE_USERS(squadUuid),
-            { userUuids },
-        );
+    /** Detaches EVERY user from the external squad. */
+    removeAllUsersFromExternalSquad(squadUuid: string) {
+        return this.delete(REST_API.EXTERNAL_SQUADS.BULK_ACTIONS.REMOVE_USERS(squadUuid));
     }
-
-    async reorderExternalSquads(params: Record<string, unknown>) {
+    reorderExternalSquads(params: Params) {
         return this.post(REST_API.EXTERNAL_SQUADS.ACTIONS.REORDER, params);
     }
 
-    // Settings
+    // ---------------------------------------------------------------- HWID
 
-    async getSettings() {
-        return this.get(REST_API.REMNAAWAVE_SETTINGS.GET);
+    getUserHwidDevices(userId: number) {
+        return this.get(REST_API.HWID.GET_USER_HWID_DEVICES(String(userId)));
+    }
+    getAllHwidDevices(query: Params = {}) {
+        return this.get(REST_API.HWID.GET_ALL_HWID_DEVICES, query);
+    }
+    getHwidStats() {
+        return this.get(REST_API.HWID.STATS);
+    }
+    getHwidTopUsers(query: Params = {}) {
+        return this.get(REST_API.HWID.TOP_USERS_BY_DEVICES, query);
+    }
+    createUserHwidDevice(params: Params) {
+        return this.post(REST_API.HWID.CREATE_USER_HWID_DEVICE, params);
+    }
+    deleteHwidDevice(userId: number, hwid: string) {
+        return this.post(REST_API.HWID.DELETE_USER_HWID_DEVICE, { userId, hwid });
+    }
+    deleteAllUserHwidDevices(userId: number) {
+        return this.post(REST_API.HWID.DELETE_ALL_USER_HWID_DEVICES, { userId });
     }
 
-    async updateSettings(params: Record<string, unknown>) {
+    // ---------------------------------------------------------------- Bandwidth stats
+
+    getNodesUsage(query: Params) {
+        return this.get(REST_API.BANDWIDTH_STATS.NODES.GET, query);
+    }
+    getNodesRealtimeUsage() {
+        return this.get(REST_API.BANDWIDTH_STATS.NODES.GET_REALTIME);
+    }
+    getNodeUsersUsage(uuid: string, query: Params) {
+        return this.get(REST_API.BANDWIDTH_STATS.NODES.GET_USERS(uuid), query);
+    }
+    getNodesUsersUsage(nodesUuids: string[], query: Params) {
+        return this.post(REST_API.BANDWIDTH_STATS.NODES.GET_USERS_BY_NODES, { nodesUuids }, query);
+    }
+    getNodesUsageByUuids(nodesUuids: string[], query: Params) {
+        return this.post(REST_API.BANDWIDTH_STATS.NODES.GET_USAGE, { nodesUuids }, query);
+    }
+    getUserUsage(userId: number, query: Params) {
+        return this.get(REST_API.BANDWIDTH_STATS.USERS.GET_BY_ID(String(userId)), query);
+    }
+    getInternalSquadUsage(uuid: string, query: Params) {
+        return this.get(REST_API.BANDWIDTH_STATS.INTERNAL_SQUADS.GET_USAGE(uuid), query);
+    }
+    getInternalSquadUserUsage(squadUuid: string, userId: number, query: Params) {
+        return this.get(REST_API.BANDWIDTH_STATS.INTERNAL_SQUADS.USER_USAGE(squadUuid, String(userId)), query);
+    }
+
+    // ---------------------------------------------------------------- Auth / API tokens / keygen
+
+    getAuthStatus() {
+        return this.get(REST_API.AUTH.GET_STATUS);
+    }
+    getApiTokens() {
+        return this.get(REST_API.API_TOKENS.GET);
+    }
+    getApiTokenScopes() {
+        return this.get(REST_API.API_TOKENS.GET_SCOPES);
+    }
+    createApiToken(params: Params) {
+        return this.post(REST_API.API_TOKENS.CREATE, params);
+    }
+    deleteApiToken(uuid: string) {
+        return this.delete(REST_API.API_TOKENS.DELETE(uuid));
+    }
+    getKeygen() {
+        return this.get(REST_API.KEYGEN.GET);
+    }
+
+    // ---------------------------------------------------------------- Infra billing
+
+    getBillingProviders() {
+        return this.get(REST_API.INFRA_BILLING.GET_PROVIDERS);
+    }
+    getBillingProviderByUuid(uuid: string) {
+        return this.get(REST_API.INFRA_BILLING.GET_PROVIDER_BY_UUID(uuid));
+    }
+    createBillingProvider(params: Params) {
+        return this.post(REST_API.INFRA_BILLING.CREATE_PROVIDER, params);
+    }
+    updateBillingProvider(params: Params) {
+        return this.patch(REST_API.INFRA_BILLING.UPDATE_PROVIDER, params);
+    }
+    deleteBillingProvider(uuid: string) {
+        return this.delete(REST_API.INFRA_BILLING.DELETE_PROVIDER(uuid));
+    }
+    getBillingNodes() {
+        return this.get(REST_API.INFRA_BILLING.GET_BILLING_NODES);
+    }
+    createBillingNode(params: Params) {
+        return this.post(REST_API.INFRA_BILLING.CREATE_BILLING_NODE, params);
+    }
+    updateBillingNode(params: Params) {
+        return this.patch(REST_API.INFRA_BILLING.UPDATE_BILLING_NODE, params);
+    }
+    deleteBillingNode(uuid: string) {
+        return this.delete(REST_API.INFRA_BILLING.DELETE_BILLING_NODE(uuid));
+    }
+    getBillingHistory(query: Params = {}) {
+        return this.get(REST_API.INFRA_BILLING.GET_BILLING_HISTORY, query);
+    }
+    createBillingHistory(params: Params) {
+        return this.post(REST_API.INFRA_BILLING.CREATE_BILLING_HISTORY, params);
+    }
+    deleteBillingHistory(uuid: string) {
+        return this.delete(REST_API.INFRA_BILLING.DELETE_BILLING_HISTORY(uuid));
+    }
+
+    // ---------------------------------------------------------------- Snippets
+
+    getSnippets() {
+        return this.get(REST_API.SNIPPETS.GET);
+    }
+    createSnippet(params: Params) {
+        return this.post(REST_API.SNIPPETS.CREATE, params);
+    }
+    updateSnippet(params: Params) {
+        return this.patch(REST_API.SNIPPETS.UPDATE, params);
+    }
+    deleteSnippet(params: Params) {
+        return this.delete(REST_API.SNIPPETS.DELETE, params);
+    }
+    syncSnippet(name: string) {
+        return this.post(REST_API.SNIPPETS.ACTIONS.SYNC, { name });
+    }
+
+    // ---------------------------------------------------------------- Panel settings
+
+    getSettings() {
+        return this.get(REST_API.REMNAAWAVE_SETTINGS.GET);
+    }
+    updateSettings(params: Params) {
         return this.patch(REST_API.REMNAAWAVE_SETTINGS.UPDATE, params);
     }
 
-    // Subscription Page Configs
+    // ---------------------------------------------------------------- Subscription page configs
 
-    async getSubscriptionPageConfigs() {
+    getSubscriptionPageConfigs() {
         return this.get(REST_API.SUBSCRIPTION_PAGE_CONFIGS.GET_ALL);
     }
-
-    async getSubscriptionPageConfig(uuid: string) {
+    getSubscriptionPageConfig(uuid: string) {
         return this.get(REST_API.SUBSCRIPTION_PAGE_CONFIGS.GET(uuid));
     }
-
-    async createSubscriptionPageConfig(params: Record<string, unknown>) {
+    createSubscriptionPageConfig(params: Params) {
         return this.post(REST_API.SUBSCRIPTION_PAGE_CONFIGS.CREATE, params);
     }
-
-    async updateSubscriptionPageConfig(params: Record<string, unknown>) {
+    updateSubscriptionPageConfig(params: Params) {
         return this.patch(REST_API.SUBSCRIPTION_PAGE_CONFIGS.UPDATE, params);
     }
-
-    async deleteSubscriptionPageConfig(uuid: string) {
+    deleteSubscriptionPageConfig(uuid: string) {
         return this.delete(REST_API.SUBSCRIPTION_PAGE_CONFIGS.DELETE(uuid));
     }
-
-    async reorderSubscriptionPageConfigs(params: Record<string, unknown>) {
+    reorderSubscriptionPageConfigs(params: Params) {
         return this.post(REST_API.SUBSCRIPTION_PAGE_CONFIGS.ACTIONS.REORDER, params);
     }
-
-    async cloneSubscriptionPageConfig(params: Record<string, unknown>) {
+    cloneSubscriptionPageConfig(params: Params) {
         return this.post(REST_API.SUBSCRIPTION_PAGE_CONFIGS.ACTIONS.CLONE, params);
     }
 
-    // Node Plugins
+    // ---------------------------------------------------------------- Node plugins / shared lists
 
-    async getNodePlugins() {
+    getNodePlugins() {
         return this.get(REST_API.NODE_PLUGINS.GET_ALL);
     }
-
-    async getNodePlugin(uuid: string) {
+    getNodePlugin(uuid: string) {
         return this.get(REST_API.NODE_PLUGINS.GET(uuid));
     }
-
-    async createNodePlugin(params: Record<string, unknown>) {
+    createNodePlugin(params: Params) {
         return this.post(REST_API.NODE_PLUGINS.CREATE, params);
     }
-
-    async updateNodePlugin(params: Record<string, unknown>) {
+    updateNodePlugin(params: Params) {
         return this.patch(REST_API.NODE_PLUGINS.UPDATE, params);
     }
-
-    async deleteNodePlugin(uuid: string) {
+    deleteNodePlugin(uuid: string) {
         return this.delete(REST_API.NODE_PLUGINS.DELETE(uuid));
     }
-
-    async reorderNodePlugins(params: Record<string, unknown>) {
+    reorderNodePlugins(params: Params) {
         return this.post(REST_API.NODE_PLUGINS.ACTIONS.REORDER, params);
     }
-
-    async cloneNodePlugin(params: Record<string, unknown>) {
+    cloneNodePlugin(params: Params) {
         return this.post(REST_API.NODE_PLUGINS.ACTIONS.CLONE, params);
     }
-
-    async executeNodePlugin(params: Record<string, unknown>) {
+    syncNodePlugin(uuid: string) {
+        return this.post(REST_API.NODE_PLUGINS.ACTIONS.SYNC, { uuid });
+    }
+    executeNodePlugin(params: Params) {
         return this.post(REST_API.NODE_PLUGINS.EXECUTOR, params);
     }
-
-    async getTorrentBlockerReports() {
-        return this.get(REST_API.NODE_PLUGINS.TORRENT_BLOCKER.GET_REPORTS);
+    getSharedLists() {
+        return this.get(REST_API.NODE_PLUGINS.SHARED_LISTS.GET_ALL);
     }
-
-    async getTorrentBlockerStats() {
+    createSharedList(params: Params) {
+        return this.post(REST_API.NODE_PLUGINS.SHARED_LISTS.CREATE, params);
+    }
+    updateSharedList(params: Params) {
+        return this.patch(REST_API.NODE_PLUGINS.SHARED_LISTS.UPDATE, params);
+    }
+    syncSharedList(name: string) {
+        return this.post(REST_API.NODE_PLUGINS.SHARED_LISTS.ACTIONS.SYNC, { name });
+    }
+    getTorrentBlockerReports(query: Params = {}) {
+        return this.get(REST_API.NODE_PLUGINS.TORRENT_BLOCKER.GET_REPORTS, query);
+    }
+    getTorrentBlockerStats() {
         return this.get(REST_API.NODE_PLUGINS.TORRENT_BLOCKER.GET_REPORTS_STATS);
     }
-
-    async truncateTorrentBlockerReports() {
+    truncateTorrentBlockerReports() {
         return this.post(REST_API.NODE_PLUGINS.TORRENT_BLOCKER.TRUNCATE_REPORTS);
     }
 
-    // IP Control
+    // ---------------------------------------------------------------- Node integrations
 
-    async fetchIps(uuid: string) {
-        return this.post(REST_API.IP_CONTROL.FETCH_IPS(uuid));
+    getNodeIntegrations() {
+        return this.get(REST_API.NODE_INTEGRATIONS.GET_ALL);
+    }
+    getNodeIntegration(uuid: string) {
+        return this.get(REST_API.NODE_INTEGRATIONS.GET(uuid));
+    }
+    createNodeIntegration(params: Params) {
+        return this.post(REST_API.NODE_INTEGRATIONS.CREATE, params);
+    }
+    updateNodeIntegration(params: Params) {
+        return this.patch(REST_API.NODE_INTEGRATIONS.UPDATE, params);
+    }
+    deleteNodeIntegration(uuid: string) {
+        return this.delete(REST_API.NODE_INTEGRATIONS.DELETE(uuid));
     }
 
-    async getFetchIpsResult(jobId: string) {
-        return this.get(REST_API.IP_CONTROL.GET_FETCH_IPS_RESULT(jobId));
+    // ---------------------------------------------------------------- Connections (replaces ip-control)
+
+    startConnectionsByUser(userId: number) {
+        return this.post(REST_API.CONNECTIONS.CONNECTIONS_BY_USER(String(userId)));
+    }
+    getConnectionsByUserResult(jobId: string) {
+        return this.get(REST_API.CONNECTIONS.CONNECTIONS_BY_USER_RESULT(jobId));
+    }
+    startConnectionsByNode(nodeUuid: string) {
+        return this.post(REST_API.CONNECTIONS.CONNECTIONS_BY_NODE(nodeUuid));
+    }
+    getConnectionsByNodeResult(jobId: string) {
+        return this.get(REST_API.CONNECTIONS.CONNECTIONS_BY_NODE_RESULT(jobId));
+    }
+    startGeocheckByNode(nodeUuid: string, params: Params = {}) {
+        return this.post(REST_API.CONNECTIONS.GEOCHECK_BY_NODE(nodeUuid), params);
+    }
+    getGeocheckByNodeResult(jobId: string) {
+        return this.get(REST_API.CONNECTIONS.GEOCHECK_BY_NODE_RESULT(jobId));
+    }
+    dropConnections(params: Params) {
+        return this.post(REST_API.CONNECTIONS.DROP_CONNECTIONS, params);
     }
 
-    async dropConnections(params: Record<string, unknown>) {
-        return this.post(REST_API.IP_CONTROL.DROP_CONNECTIONS, params);
-    }
+    // ---------------------------------------------------------------- Metadata
 
-    async fetchUsersIps(nodeUuid: string) {
-        return this.post(REST_API.IP_CONTROL.FETCH_USERS_IPS(nodeUuid));
-    }
-
-    async getFetchUsersIpsResult(jobId: string) {
-        return this.get(REST_API.IP_CONTROL.GET_FETCH_USERS_IPS_RESULT(jobId));
-    }
-
-    // Metadata
-
-    async getNodeMetadata(uuid: string) {
+    getNodeMetadata(uuid: string) {
         return this.get(REST_API.METADATA.NODE.GET(uuid));
     }
-
-    async upsertNodeMetadata(uuid: string, params: Record<string, unknown>) {
+    upsertNodeMetadata(uuid: string, params: Params) {
         return this.put(REST_API.METADATA.NODE.UPSERT(uuid), params);
     }
-
-    async getUserMetadata(uuid: string) {
-        return this.get(REST_API.METADATA.USER.GET(uuid));
+    getUserMetadata(userId: number) {
+        return this.get(REST_API.METADATA.USER.GET(String(userId)));
     }
-
-    async upsertUserMetadata(uuid: string, params: Record<string, unknown>) {
-        return this.put(REST_API.METADATA.USER.UPSERT(uuid), params);
+    upsertUserMetadata(userId: number, params: Params) {
+        return this.put(REST_API.METADATA.USER.UPSERT(String(userId)), params);
     }
 }

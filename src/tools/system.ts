@@ -1,151 +1,30 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { RemnawaveClient } from '../client/index.js';
-import { toolResult, toolError } from './helpers.js';
+import { run } from './helpers.js';
 
-export function registerSystemTools(
-    server: McpServer,
-    client: RemnawaveClient,
-) {
+export function registerSystemTools(server: McpServer, client: RemnawaveClient) {
+    server.tool('system_stats', 'Panel statistics: users, nodes, traffic, system resources', {}, () => run(() => client.getStats()));
+    server.tool('system_bandwidth_stats', 'Bandwidth statistics over standard periods', {}, () => run(() => client.getBandwidthStats()));
+    server.tool('system_nodes_metrics', 'Per-node metrics', {}, () => run(() => client.getNodesMetrics()));
+    server.tool('system_nodes_statistics', 'Nodes statistics (traffic per node over last days)', {}, () => run(() => client.getNodesStatistics()));
+    server.tool('system_stats_recap', 'Recap statistics', {}, () => run(() => client.getStatsRecap()));
     server.tool(
-        'system_stats',
-        'Get overall Remnawave panel statistics (users, nodes, traffic, memory, CPU)',
-        {},
-        async () => {
-            try {
-                const result = await client.getStats();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
+        'system_stats_digest',
+        'Digest statistics for a period',
+        { start: z.string().describe('ISO 8601'), end: z.string().describe('ISO 8601') },
+        ({ start, end }) => run(() => client.getStatsDigest(start, end)),
     );
-
-    server.tool(
-        'system_bandwidth_stats',
-        'Get bandwidth statistics',
-        {},
-        async () => {
-            try {
-                const result = await client.getBandwidthStats();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'system_nodes_metrics',
-        'Get detailed node metrics',
-        {},
-        async () => {
-            try {
-                const result = await client.getNodesMetrics();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'system_nodes_statistics',
-        'Get node statistics',
-        {},
-        async () => {
-            try {
-                const result = await client.getNodesStatistics();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'system_health',
-        'Check Remnawave panel health status',
-        {},
-        async () => {
-            try {
-                const result = await client.getHealth();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'system_metadata',
-        'Get Remnawave panel metadata and version information',
-        {},
-        async () => {
-            try {
-                const result = await client.getSystemMetadata();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'system_generate_x25519',
-        'Generate X25519 key pair for VLESS Reality',
-        {},
-        async () => {
-            try {
-                const result = await client.generateX25519();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'auth_status',
-        'Check current authentication status with Remnawave panel',
-        {},
-        async () => {
-            try {
-                const result = await client.getAuthStatus();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
-    server.tool(
-        'system_stats_recap',
-        'Get system statistics recap',
-        {},
-        async () => {
-            try {
-                const result = await client.getStatsRecap();
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
-    );
-
+    server.tool('system_http_stats', 'HTTP request statistics of the panel', {}, () => run(() => client.getHttpStats()));
+    server.tool('system_health', 'Panel health check', {}, () => run(() => client.getHealth()));
+    server.tool('system_metadata', 'Panel metadata (version, build)', {}, () => run(() => client.getSystemMetadata()));
+    server.tool('system_configuration', 'Panel runtime configuration', {}, () => run(() => client.getConfiguration()));
+    server.tool('system_generate_x25519', 'Generate an X25519 key pair for VLESS Reality', {}, () => run(() => client.generateX25519()));
+    server.tool('auth_status', 'Auth status of the panel', {}, () => run(() => client.getAuthStatus()));
     server.tool(
         'system_srr_matcher',
-        'Test subscription request routing rules',
-        {
-            responseRules: z.record(z.unknown()).describe('Response rules configuration object with version and rules array'),
-        },
-        async (params) => {
-            try {
-                const result = await client.testSrrMatcher(params);
-                return toolResult(result);
-            } catch (e) {
-                return toolError(e);
-            }
-        },
+        'Test subscription response rules (SRR) against the matcher',
+        { responseRules: z.record(z.unknown()).describe('Response rules object {version, settings, rules}') },
+        (p) => run(() => client.testSrrMatcher(p)),
     );
 }

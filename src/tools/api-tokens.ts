@@ -1,24 +1,29 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { RemnawaveClient } from '../client/index.js';
-import { toolResult, toolError } from './helpers.js';
+import { run } from './helpers.js';
 
 export function registerApiTokenTools(server: McpServer, client: RemnawaveClient, readonly: boolean) {
-    server.tool('api_tokens_list', 'List all API tokens', {}, async () => {
-        try { return toolResult(await client.getApiTokens()); } catch (e) { return toolError(e); }
-    });
+    server.tool('api_tokens_list', 'List API tokens', {}, () => run(() => client.getApiTokens()));
+    server.tool('api_tokens_scopes', 'List available API token scopes', {}, () => run(() => client.getApiTokenScopes()));
 
     if (readonly) return;
 
-    server.tool('api_tokens_create', 'Create a new API token', {
-        tokenName: z.string().describe('Token name'),
-    }, async (params) => {
-        try { return toolResult(await client.createApiToken(params)); } catch (e) { return toolError(e); }
-    });
+    server.tool(
+        'api_tokens_create',
+        'Create an API token',
+        {
+            name: z.string().describe('Token name'),
+            expiresInDays: z.number().int().describe('Lifetime in days'),
+            scopes: z.array(z.string()).optional().describe('Scopes (see api_tokens_scopes); omit for full access'),
+        },
+        (p) => run(() => client.createApiToken(p)),
+    );
 
-    server.tool('api_tokens_delete', 'Delete an API token', {
-        uuid: z.string().describe('Token UUID to delete'),
-    }, async ({ uuid }) => {
-        try { await client.deleteApiToken(uuid); return toolResult({ success: true, message: `Token ${uuid} deleted` }); } catch (e) { return toolError(e); }
-    });
+    server.tool('api_tokens_delete', 'Delete an API token', { uuid: z.string() }, ({ uuid }) =>
+        run(async () => {
+            await client.deleteApiToken(uuid);
+            return { success: true, message: `Token ${uuid} deleted` };
+        }),
+    );
 }

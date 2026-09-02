@@ -8,29 +8,31 @@
 
 ## MCP Server for Remnawave Panel
 
-MCP server ([Model Context Protocol](https://modelcontextprotocol.io)) providing LLM clients (Claude Desktop, Cursor, Windsurf, etc.) with tools to manage a [Remnawave](https://github.com/remnawave/) VPN panel.
+MCP server ([Model Context Protocol](https://modelcontextprotocol.io)) providing LLM clients (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) with tools to manage a [Remnawave](https://github.com/remnawave/) VPN panel.
 
-**Version:** 1.2.0 | **Remnawave API:** 2.7.4
+**Version:** 2.0.0 | **Remnawave panel:** 3.4.x | **Contract:** @remnawave/backend-contract 3.4.13
+
+> Panel 2.x users: stay on the [1.2.0 release](https://github.com/TrackLine/mcp-remnawave/releases) of the upstream project. Version 2.0.0 targets the 3.x API, which is not backward compatible (see [Migration from 1.x](#migration-from-1x)).
 
 ### Features
 
-- **153 tools** — full management of users, nodes, hosts, subscriptions, squads, HWID, config profiles, inbounds, API tokens, billing, snippets, external squads, settings, subscription page configs, node plugins, IP control, and metadata
+- **186 tools** — users, nodes, hosts, subscriptions, bandwidth stats, squads, HWID, config profiles, inbounds, connections, API tokens, billing, snippets, external squads, settings, subscription page configs, node plugins, node integrations and metadata
 - **3 resources** — real-time panel stats, node status, health checks
 - **5 prompts** — guided workflows for common tasks
-- **Readonly mode** — restrict to 69 read-only tools for safe monitoring
-- **Caddy support** — `X-Api-Key` header for panels behind Caddy with custom path
-- **Type-safe** — built on [@remnawave/backend-contract](https://www.npmjs.com/package/@remnawave/backend-contract) for API route validation
-- **stdio transport** — works with Claude Desktop, Cursor, Windsurf, and any MCP-compatible client
+- **Readonly mode** — restrict to 90 read-only tools for safe monitoring
+- **Caddy / Cloudflare Access support** — `X-Api-Key` and `CF-Access-*` headers
+- **Type-safe** — every route comes from [@remnawave/backend-contract](https://www.npmjs.com/package/@remnawave/backend-contract); `npm run build` type-checks first, so a contract bump surfaces removed routes at build time
+- **stdio transport** — works with any MCP-compatible client
 
 ### Requirements
 
 - Node.js >= 22
-- Remnawave panel with API token (Settings > API Tokens)
+- Remnawave panel **3.4 or newer** with an API token (Settings > API Tokens)
 
 ### Installation
 
 ```bash
-git clone https://github.com/TrackLine/mcp-remnawave.git
+git clone https://github.com/akadorkin/mcp-remnawave.git
 cd mcp-remnawave
 npm install
 npm run build
@@ -45,6 +47,7 @@ Create a `.env` file or pass environment variables:
 | `REMNAWAVE_BASE_URL` | Yes | Panel URL (e.g. `https://vpn.example.com`) |
 | `REMNAWAVE_API_TOKEN` | Yes | API token from panel settings |
 | `REMNAWAVE_API_KEY` | No | API key for Caddy reverse proxy authentication |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | No | Cloudflare Access service token |
 | `REMNAWAVE_READONLY` | No | Set to `true` to enable readonly mode |
 
 ```env
@@ -65,31 +68,31 @@ The `X-Api-Key` header will be added to every request automatically.
 
 ### Readonly Mode
 
-Set `REMNAWAVE_READONLY=true` to disable all write operations (create, update, delete, enable, disable, restart, revoke, reset). Only read/list tools will be registered.
+Set `REMNAWAVE_READONLY=true` to disable all write operations (create, update, delete, enable, disable, restart, revoke, reset, drop). Only read/list tools will be registered. Tools that *start* a collection job (`connections_by_user`, `connections_by_node`, `connections_geocheck`) are considered read-only: they change nothing on the panel.
 
-Useful for monitoring dashboards or shared environments where you want to prevent accidental changes.
-
-In readonly mode, the available tools are reduced from 153 to 69:
+In readonly mode, the available tools are reduced from 186 to 90:
 
 | Category | Available tools |
 |----------|----------------|
-| Users (10) | `users_list`, `users_get`, `users_get_by_username`, `users_get_by_short_uuid`, `users_get_by_telegram_id`, `users_get_by_email`, `users_get_by_tag`, `users_get_by_subscription_uuid`, `users_tags_list`, `users_resolve` |
+| Users (10) | `users_list`, `users_find`, `users_stream`, `users_get`, `users_get_by_username`, `users_get_by_short_uuid`, `users_tags_list`, `users_resolve`, `users_accessible_nodes`, `users_subscription_request_history` |
 | Nodes (3) | `nodes_list`, `nodes_get`, `nodes_tags_list` |
 | Hosts (3) | `hosts_list`, `hosts_get`, `hosts_tags_list` |
-| System (10) | all tools (read-only by nature) |
-| Subscriptions (10) | all tools (read-only by nature) |
-| Config Profiles & Inbounds (5) | `config_profiles_list`, `config_profiles_get`, `inbounds_list`, `config_profiles_get_inbounds`, `config_profiles_get_computed_config` |
-| Internal Squads (2) | `squads_list`, `squads_accessible_nodes` |
-| HWID (4) | `hwid_devices_list`, `hwid_devices_list_all`, `hwid_stats`, `hwid_top_users` |
-| API Tokens (1) | `api_tokens_list` |
+| System & auth (13) | `system_stats`, `system_bandwidth_stats`, `system_nodes_metrics`, `system_nodes_statistics`, `system_stats_recap`, `system_stats_digest`, `system_http_stats`, `system_health`, `system_metadata`, `system_configuration`, `system_generate_x25519`, `auth_status`, `system_srr_matcher` |
+| Bandwidth stats (8) | `bandwidth_nodes_usage`, `bandwidth_nodes_realtime`, `bandwidth_node_users_usage`, `bandwidth_nodes_users_usage`, `bandwidth_nodes_usage_by_uuids`, `bandwidth_user_usage`, `bandwidth_squad_usage`, `bandwidth_squad_user_usage` |
+| Subscriptions & templates (13) | `subscriptions_list`, `subscriptions_get_by_id`, `subscriptions_get_by_username`, `subscriptions_get_by_short_uuid`, `subscription_info`, `subscriptions_get_raw_by_short_uuid`, `subscriptions_get_subpage_config`, `subscriptions_get_connection_keys`, `subscription_request_history_list`, `subscription_request_history_stats`, `sub_templates_list`, `sub_templates_get`, `sub_settings_get` |
+| Config profiles & inbounds (5) | `config_profiles_list`, `config_profiles_get`, `inbounds_list`, `config_profiles_get_inbounds`, `config_profiles_get_computed_config` |
+| Internal squads (3) | `squads_list`, `squads_get`, `squads_accessible_nodes` |
+| External squads (2) | `external_squads_list`, `external_squads_get` |
+| HWID devices (4) | `hwid_devices_list`, `hwid_devices_list_all`, `hwid_stats`, `hwid_top_users` |
+| Connections (6) | `connections_by_user`, `connections_by_user_result`, `connections_by_node`, `connections_by_node_result`, `connections_geocheck`, `connections_geocheck_result` |
+| API tokens (2) | `api_tokens_list`, `api_tokens_scopes` |
 | Keygen (1) | `keygen_get` |
-| Infra Billing (4) | `billing_providers_list`, `billing_provider_get`, `billing_nodes_list`, `billing_history_list` |
+| Infra billing (4) | `billing_providers_list`, `billing_provider_get`, `billing_nodes_list`, `billing_history_list` |
 | Snippets (1) | `snippets_list` |
-| External Squads (2) | `external_squads_list`, `external_squads_get` |
-| Settings (1) | `settings_get` |
-| Sub Page Configs (2) | `sub_page_configs_list`, `sub_page_configs_get` |
-| Node Plugins (4) | `node_plugins_list`, `node_plugins_get`, `node_plugins_torrent_reports`, `node_plugins_torrent_stats` |
-| IP Control (4) | `ip_control_fetch_ips`, `ip_control_get_fetch_ips_result`, `ip_control_fetch_users_ips`, `ip_control_get_fetch_users_ips_result` |
+| Panel settings (1) | `settings_get` |
+| Subscription page configs (2) | `sub_page_configs_list`, `sub_page_configs_get` |
+| Node plugins & shared lists (5) | `node_plugins_list`, `node_plugins_get`, `node_plugins_torrent_reports`, `node_plugins_torrent_stats`, `shared_lists_list` |
+| Node integrations (2) | `node_integrations_list`, `node_integrations_get` |
 | Metadata (2) | `metadata_node_get`, `metadata_user_get` |
 
 ### Usage with Claude Desktop
@@ -101,38 +104,30 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "remnawave": {
       "command": "node",
-      "args": ["/absolute/path/to/remnawave-mcp/dist/index.js"],
+      "args": ["/absolute/path/to/mcp-remnawave/dist/index.js"],
       "env": {
         "REMNAWAVE_BASE_URL": "https://vpn.example.com",
         "REMNAWAVE_API_TOKEN": "your-api-token-here",
-        "REMNAWAVE_API_KEY": "your-caddy-api-key",
-        "REMNAWAVE_READONLY": "false"
+        "REMNAWAVE_READONLY": "true"
       }
     }
   }
 }
+```
+
+### Usage with Claude Code
+
+```bash
+claude mcp add -s user remnawave \
+  -e REMNAWAVE_BASE_URL=https://vpn.example.com \
+  -e REMNAWAVE_API_TOKEN=your-api-token-here \
+  -e REMNAWAVE_READONLY=true \
+  -- node /absolute/path/to/mcp-remnawave/dist/index.js
 ```
 
 ### Usage with Cursor / Windsurf
 
-Add to `.cursor/mcp.json` or `.windsurf/mcp.json` in your project:
-
-```json
-{
-  "mcpServers": {
-    "remnawave": {
-      "command": "node",
-      "args": ["/absolute/path/to/remnawave-mcp/dist/index.js"],
-      "env": {
-        "REMNAWAVE_BASE_URL": "https://vpn.example.com",
-        "REMNAWAVE_API_TOKEN": "your-api-token-here",
-        "REMNAWAVE_API_KEY": "your-caddy-api-key",
-        "REMNAWAVE_READONLY": "false"
-      }
-    }
-  }
-}
-```
+Add to `.cursor/mcp.json` or `.windsurf/mcp.json` in your project — same JSON as for Claude Desktop.
 
 ### Docker
 
@@ -143,250 +138,318 @@ docker compose up -d
 
 Environment variables are passed via `.env` file or `docker-compose.yml`.
 
+### Migration from 1.x
+
+Remnawave 3.x changed its identifiers, so most user-related tool parameters changed:
+
+| 1.x | 2.0 | Notes |
+|-----|-----|-------|
+| `uuid` (user) | `id` (number) | Users are addressed by numeric `id`; the old UUID is now `vlessUuid` and is only a credential |
+| `userUuid` (HWID) | `userId` | |
+| `uuids` in `users_bulk_*` | `userIds` | numbers |
+| `users_get_by_telegram_id`, `_by_email`, `_by_tag`, `_by_id`, `_by_subscription_uuid` | `users_find` / `users_list` filters / `users_stream` | Dedicated lookup routes were removed from the API |
+| `subscriptions_get_by_uuid` | `subscriptions_get_by_id` | |
+| `hosts_bulk_set_inbound`, `hosts_bulk_set_port` | `hosts_bulk_update` | Any host field can be bulk-applied |
+| `tag` (host) | `tags` (array) | `allowInsecure` removed |
+| `excludedInternalSquads` (host) | `internalSquads` + `internalSquadsMode` (`EXCLUDE` / `ALLOW_ONLY`) | |
+| `ip_control_*` | `connections_*` | `drop` now takes `userIds` |
+| `squads_add_users` (**added ALL users** in 1.x: the body was ignored) | `squads_add_users` with `userIds`; `squads_add_all_users` for the old behaviour | Same for `remove` and for external squads |
+| `api_tokens_create { tokenName }` | `{ name, expiresInDays, scopes? }` | |
+| `billing_node_create` | `name` and `nextBillingAt` are now required | |
+| `nodes_restart` | takes `forceRestart` (default `false`) | 1.x sent no body and failed validation |
+| `remnawave://users/{uuid}` | `remnawave://users/{id}` | |
+
+New in 2.0: `users_extend`, `users_stream`, `users_accessible_nodes`, `users_subscription_request_history`, `bandwidth_*`, `system_stats_digest`, `system_http_stats`, `system_configuration`, `connections_geocheck`, `node_integrations_*`, `shared_lists_*`, `*_sync`, `api_tokens_scopes`, `sub_templates_*`, `sub_settings_get`, `hosts_reorder`, `squads_get`, `squads_reorder`.
+
+Not exposed (absent from panel 3.4.3 or unstable between 3.4.x releases): tag get/set endpoints for profiles/squads/templates, node SSH tickets, shared-list delete / get-by-name.
+
 ### Available Tools
 
-#### Users (27 tools)
+#### Users (28 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `users_list` | List all users with pagination | read |
-| `users_get` | Get user by UUID | read |
-| `users_get_by_username` | Get user by username | read |
-| `users_get_by_short_uuid` | Get user by short UUID | read |
-| `users_get_by_telegram_id` | Get user by Telegram ID | read |
-| `users_get_by_email` | Get user by email | read |
-| `users_get_by_tag` | Get user by tag | read |
-| `users_get_by_subscription_uuid` | Get user by subscription UUID | read |
+| `users_list` | List Remnawave VPN users with pagination and optional column filters (exact match). Filter ids known to work: telegramId, vlessUuid, email, tag, status. | read |
+| `users_find` | Find users by an exact attribute value: telegramId, email, tag or vlessUuid. Shortcut over users_list filters. | read |
+| `users_stream` | Cursor-based export of users, optionally filtered by status/strategy/telegramId/email/tag/externalSquadUuid. Use for iterating over all users. | read |
+| `users_get` | Get a user by numeric id | read |
+| `users_get_by_username` | Get a user by username | read |
+| `users_get_by_short_uuid` | Get a user by subscription short UUID | read |
 | `users_tags_list` | List all user tags | read |
-| `users_resolve` | Resolve users by multiple criteria | read |
-| `users_create` | Create a new user | write |
-| `users_update` | Update user settings | write |
+| `users_resolve` | Resolve a user by exactly one of: id, shortUuid, username | read |
+| `users_accessible_nodes` | List nodes a user can connect to (via their internal squads) | read |
+| `users_subscription_request_history` | Subscription fetch history (client apps, IPs, user agents) for a user | read |
+| `users_create` | Create a new VPN user | write |
+| `users_update` | Update an existing user (identify by id or username) | write |
 | `users_delete` | Delete a user | write |
 | `users_enable` | Enable a disabled user | write |
 | `users_disable` | Disable a user | write |
-| `users_revoke_subscription` | Revoke subscription (regenerate link) | write |
-| `users_reset_traffic` | Reset traffic counter | write |
-| `users_bulk_delete_by_status` | Bulk delete users by status | write |
-| `users_bulk_update` | Bulk update users | write |
-| `users_bulk_reset_traffic` | Bulk reset traffic | write |
-| `users_bulk_revoke_subscription` | Bulk revoke subscriptions | write |
-| `users_bulk_delete` | Bulk delete users | write |
-| `users_bulk_update_squads` | Bulk update user squads | write |
-| `users_bulk_extend_expiration` | Bulk extend expiration dates | write |
-| `users_bulk_all_update` | Bulk update all users | write |
-| `users_bulk_all_reset_traffic` | Bulk reset all users traffic | write |
-| `users_bulk_all_extend_expiration` | Bulk extend all users expiration | write |
+| `users_revoke_subscription` | Revoke subscription: regenerates the short UUID and credentials (or only passwords) | write |
+| `users_reset_traffic` | Reset traffic counter of a user | write |
+| `users_extend` | Extend expiration date of a user by N days | write |
+| `users_bulk_delete_by_status` | Delete all users with the given status | write |
+| `users_bulk_update` | Bulk update fields for selected users | write |
+| `users_bulk_reset_traffic` | Reset traffic for selected users | write |
+| `users_bulk_revoke_subscription` | Revoke subscriptions for selected users | write |
+| `users_bulk_delete` | Delete selected users | write |
+| `users_bulk_update_squads` | Set internal squads for selected users | write |
+| `users_bulk_extend_expiration` | Extend expiration date for selected users | write |
+| `users_bulk_all_update` | Update ALL users at once | write |
+| `users_bulk_all_reset_traffic` | Reset traffic counters for ALL users | write |
+| `users_bulk_all_extend_expiration` | Extend expiration date for ALL users | write |
 
 #### Nodes (15 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `nodes_list` | List all nodes | read |
-| `nodes_get` | Get node by UUID | read |
+| `nodes_list` | List all nodes with status and traffic | read |
+| `nodes_get` | Get a node by UUID | read |
 | `nodes_tags_list` | List all node tags | read |
-| `nodes_create` | Create a new node | write |
-| `nodes_update` | Update node settings | write |
-| `nodes_delete` | Delete a node | write |
+| `nodes_create` | Create a node. Requires name, address, activeConfigProfileUuid and activeInbounds. | write |
+| `nodes_update` | Update a node (only the provided fields change) | write |
+| `nodes_delete` | Delete a node (cascades: usage history, billing, host bindings) | write |
 | `nodes_enable` | Enable a node | write |
 | `nodes_disable` | Disable a node | write |
-| `nodes_restart` | Restart a specific node | write |
-| `nodes_restart_all` | Restart all nodes | write |
-| `nodes_reset_traffic` | Reset node traffic counter | write |
+| `nodes_restart` | Restart xray on a node | write |
+| `nodes_restart_all` | Restart xray on all nodes | write |
+| `nodes_reset_traffic` | Reset traffic counter of a node | write |
 | `nodes_reorder` | Reorder nodes | write |
-| `nodes_bulk_profile_modification` | Bulk modify node profiles | write |
-| `nodes_bulk_actions` | Bulk node actions | write |
-| `nodes_bulk_update` | Bulk update nodes | write |
+| `nodes_bulk_profile_modification` | Set config profile and inbounds for selected nodes | write |
+| `nodes_bulk_actions` | Enable / disable / restart / reset traffic on selected nodes | write |
+| `nodes_bulk_update` | Bulk update properties for selected nodes | write |
 
 #### Hosts (11 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
 | `hosts_list` | List all hosts | read |
-| `hosts_get` | Get host by UUID | read |
+| `hosts_get` | Get a host by UUID | read |
 | `hosts_tags_list` | List all host tags | read |
-| `hosts_create` | Create a new host | write |
-| `hosts_update` | Update host settings | write |
+| `hosts_create` | Create a host. Requires remark, address, port, configProfileUuid and configProfileInboundUuid. | write |
+| `hosts_update` | Update a host (only the provided fields change) | write |
 | `hosts_delete` | Delete a host | write |
-| `hosts_bulk_enable` | Bulk enable hosts | write |
-| `hosts_bulk_disable` | Bulk disable hosts | write |
-| `hosts_bulk_delete` | Bulk delete hosts | write |
-| `hosts_bulk_set_inbound` | Bulk set host inbound | write |
-| `hosts_bulk_set_port` | Bulk set host port | write |
+| `hosts_reorder` | Reorder hosts | write |
+| `hosts_bulk_enable` | Enable selected hosts | write |
+| `hosts_bulk_disable` | Disable selected hosts | write |
+| `hosts_bulk_delete` | Delete selected hosts | write |
+| `hosts_bulk_update` | Apply the same field values to selected hosts (replaces the old set-inbound / set-port tools) | write |
 
-#### System (10 tools)
+#### System & auth (13 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `system_stats` | Panel statistics (users, nodes, traffic, CPU, memory) | read |
-| `system_bandwidth_stats` | Bandwidth statistics | read |
-| `system_nodes_metrics` | Node metrics | read |
-| `system_nodes_statistics` | Node statistics | read |
+| `system_stats` | Panel statistics: users, nodes, traffic, system resources | read |
+| `system_bandwidth_stats` | Bandwidth statistics over standard periods | read |
+| `system_nodes_metrics` | Per-node metrics | read |
+| `system_nodes_statistics` | Nodes statistics (traffic per node over last days) | read |
+| `system_stats_recap` | Recap statistics | read |
+| `system_stats_digest` | Digest statistics for a period | read |
+| `system_http_stats` | HTTP request statistics of the panel | read |
 | `system_health` | Panel health check | read |
-| `system_metadata` | Panel version and metadata | read |
-| `system_generate_x25519` | Generate X25519 key pair | read |
-| `auth_status` | Check authentication status | read |
-| `system_stats_recap` | System statistics recap | read |
-| `system_srr_matcher` | Test SRR routing rules | read |
+| `system_metadata` | Panel metadata (version, build) | read |
+| `system_configuration` | Panel runtime configuration | read |
+| `system_generate_x25519` | Generate an X25519 key pair for VLESS Reality | read |
+| `auth_status` | Auth status of the panel | read |
+| `system_srr_matcher` | Test subscription response rules (SRR) against the matcher | read |
 
-#### Subscriptions (10 tools)
+#### Bandwidth stats (8 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `subscriptions_list` | List all subscriptions | read |
-| `subscriptions_get_by_uuid` | Get subscription by UUID | read |
+| `bandwidth_nodes_usage` | Traffic per node for a period (top N nodes) | read |
+| `bandwidth_nodes_realtime` | Realtime traffic of nodes | read |
+| `bandwidth_node_users_usage` | Top users by traffic on one node for a period | read |
+| `bandwidth_nodes_users_usage` | Top users by traffic across several nodes for a period | read |
+| `bandwidth_nodes_usage_by_uuids` | Traffic of the given nodes for a period (optionally only nodes above minTotalBytes) | read |
+| `bandwidth_user_usage` | Traffic of a user per node for a period | read |
+| `bandwidth_squad_usage` | Traffic of users in an internal squad for a period (cursor paginated) | read |
+| `bandwidth_squad_user_usage` | Traffic of one user inside an internal squad for a period | read |
+
+#### Subscriptions & templates (13 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `subscriptions_list` | List subscriptions with pagination | read |
+| `subscriptions_get_by_id` | Get subscription of a user by numeric user id | read |
 | `subscriptions_get_by_username` | Get subscription by username | read |
 | `subscriptions_get_by_short_uuid` | Get subscription by short UUID | read |
-| `subscriptions_get_raw_by_short_uuid` | Get raw subscription by short UUID | read |
-| `subscriptions_get_subpage_config` | Get subscription subpage config | read |
-| `subscriptions_get_connection_keys` | Get connection keys by UUID | read |
-| `subscription_info` | Get subscription info | read |
-| `subscription_request_history_list` | Subscription request history | read |
-| `subscription_request_history_stats` | Subscription request history stats | read |
+| `subscription_info` | Public subscription info (what the client app sees) by short UUID | read |
+| `subscriptions_get_raw_by_short_uuid` | Raw subscription (hosts with resolved links) by short UUID | read |
+| `subscriptions_get_subpage_config` | Subscription page config served for a short UUID | read |
+| `subscriptions_get_connection_keys` | Connection keys (links) of a user by numeric user id | read |
+| `subscription_request_history_list` | Subscription request history (paginated, filterable) | read |
+| `subscription_request_history_stats` | Subscription request history statistics | read |
+| `sub_templates_list` | List subscription templates | read |
+| `sub_templates_get` | Get a subscription template by UUID | read |
+| `sub_settings_get` | Get global subscription settings | read |
 
-#### Config Profiles & Inbounds (9 tools)
+#### Config profiles & inbounds (9 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `config_profiles_list` | List config profiles | read |
-| `config_profiles_get` | Get config profile by UUID | read |
-| `inbounds_list` | List all inbounds | read |
-| `config_profiles_get_inbounds` | Get inbounds by profile UUID | read |
-| `config_profiles_get_computed_config` | Get computed config by profile UUID | read |
-| `config_profiles_create` | Create config profile | write |
-| `config_profiles_update` | Update config profile | write |
-| `config_profiles_delete` | Delete config profile | write |
+| `config_profiles_list` | List all config profiles | read |
+| `config_profiles_get` | Get a config profile by UUID | read |
+| `inbounds_list` | List all inbounds from all config profiles | read |
+| `config_profiles_get_inbounds` | Get inbounds for a specific config profile | read |
+| `config_profiles_get_computed_config` | Get computed configuration for a config profile | read |
+| `config_profiles_create` | Create a new config profile | write |
+| `config_profiles_update` | Update a config profile | write |
+| `config_profiles_delete` | Delete a config profile | write |
 | `config_profiles_reorder` | Reorder config profiles | write |
 
-#### Internal Squads (7 tools)
+#### Internal squads (11 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `squads_list` | List all squads | read |
-| `squads_accessible_nodes` | Get squad accessible nodes | read |
-| `squads_create` | Create a squad | write |
-| `squads_update` | Update a squad | write |
-| `squads_delete` | Delete a squad | write |
-| `squads_add_users` | Add users to a squad | write |
-| `squads_remove_users` | Remove users from a squad | write |
+| `squads_list` | List internal squads | read |
+| `squads_get` | Get an internal squad by UUID | read |
+| `squads_accessible_nodes` | Nodes reachable through a squad | read |
+| `squads_create` | Create an internal squad | write |
+| `squads_update` | Update an internal squad | write |
+| `squads_delete` | Delete an internal squad | write |
+| `squads_reorder` | Reorder internal squads | write |
+| `squads_add_users` | Add specific users (by numeric id) to an internal squad | write |
+| `squads_remove_users` | Remove specific users (by numeric id) from an internal squad | write |
+| `squads_add_all_users` | Add EVERY user of the panel to an internal squad | write |
+| `squads_remove_all_users` | Remove EVERY user from an internal squad | write |
 
-#### HWID Devices (7 tools)
-
-| Tool | Description | Mode |
-|------|-------------|------|
-| `hwid_devices_list` | List user's HWID devices | read |
-| `hwid_devices_list_all` | List all HWID devices | read |
-| `hwid_stats` | Get HWID statistics | read |
-| `hwid_top_users` | Get top users by devices | read |
-| `hwid_device_create` | Create HWID device | write |
-| `hwid_device_delete` | Delete a specific device | write |
-| `hwid_devices_delete_all` | Delete all user's devices | write |
-
-#### API Tokens (3 tools)
-
-| Tool | Description | Mode |
-|------|-------------|------|
-| `api_tokens_list` | List API tokens | read |
-| `api_tokens_create` | Create API token | write |
-| `api_tokens_delete` | Delete API token | write |
-
-#### Keygen (1 tool)
-
-| Tool | Description | Mode |
-|------|-------------|------|
-| `keygen_get` | Get keygen data | read |
-
-#### Infra Billing (12 tools)
-
-| Tool | Description | Mode |
-|------|-------------|------|
-| `billing_providers_list` | List billing providers | read |
-| `billing_provider_get` | Get billing provider by UUID | read |
-| `billing_nodes_list` | List billing nodes | read |
-| `billing_history_list` | List billing history | read |
-| `billing_provider_create` | Create billing provider | write |
-| `billing_provider_update` | Update billing provider | write |
-| `billing_provider_delete` | Delete billing provider | write |
-| `billing_node_create` | Create billing node | write |
-| `billing_node_update` | Update billing node | write |
-| `billing_node_delete` | Delete billing node | write |
-| `billing_history_create` | Create billing history entry | write |
-| `billing_history_delete` | Delete billing history entry | write |
-
-#### Snippets (4 tools)
-
-| Tool | Description | Mode |
-|------|-------------|------|
-| `snippets_list` | List snippets | read |
-| `snippets_create` | Create snippet | write |
-| `snippets_update` | Update snippet | write |
-| `snippets_delete` | Delete snippet | write |
-
-#### External Squads (8 tools)
+#### External squads (8 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
 | `external_squads_list` | List external squads | read |
-| `external_squads_get` | Get external squad by UUID | read |
-| `external_squads_create` | Create external squad | write |
-| `external_squads_update` | Update external squad | write |
-| `external_squads_delete` | Delete external squad | write |
-| `external_squads_add_users` | Add users to external squad | write |
-| `external_squads_remove_users` | Remove users from external squad | write |
+| `external_squads_get` | Get an external squad by UUID | read |
+| `external_squads_create` | Create an external squad | write |
+| `external_squads_update` | Update an external squad (templates, subscription settings, headers, HWID settings...) | write |
+| `external_squads_delete` | Delete an external squad | write |
+| `external_squads_add_all_users` | Assign EVERY user of the panel to an external squad | write |
+| `external_squads_remove_all_users` | Detach EVERY user from an external squad | write |
 | `external_squads_reorder` | Reorder external squads | write |
 
-#### Settings (2 tools)
+#### HWID devices (7 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `settings_get` | Get panel settings | read |
-| `settings_update` | Update panel settings | write |
+| `hwid_devices_list` | List HWID devices of a user | read |
+| `hwid_devices_list_all` | List HWID devices across all users (paginated) | read |
+| `hwid_stats` | HWID device statistics | read |
+| `hwid_top_users` | Users with the most HWID devices | read |
+| `hwid_device_create` | Register a HWID device for a user | write |
+| `hwid_device_delete` | Delete one HWID device of a user | write |
+| `hwid_devices_delete_all` | Delete all HWID devices of a user | write |
 
-#### Subscription Page Configs (7 tools)
+#### Connections (7 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `sub_page_configs_list` | List subscription page configs | read |
-| `sub_page_configs_get` | Get subscription page config | read |
-| `sub_page_configs_create` | Create subscription page config | write |
-| `sub_page_configs_update` | Update subscription page config | write |
-| `sub_page_configs_delete` | Delete subscription page config | write |
-| `sub_page_configs_reorder` | Reorder subscription page configs | write |
-| `sub_page_configs_clone` | Clone subscription page config | write |
+| `connections_by_user` | Start a job collecting active connections (IPs) of a user across nodes. Returns a jobId. | read |
+| `connections_by_user_result` | Fetch the result of a connections_by_user job | read |
+| `connections_by_node` | Start a job collecting active connections of all users on a node. Returns a jobId. | read |
+| `connections_by_node_result` | Fetch the result of a connections_by_node job | read |
+| `connections_geocheck` | Start a geo/IP check from a node (optionally for a given ip or interface). Returns a jobId. | read |
+| `connections_geocheck_result` | Fetch the result of a geocheck job | read |
+| `connections_drop` | Drop active connections by user ids or IP addresses on all / specific nodes | write |
 
-#### Node Plugins (11 tools)
+#### API tokens (4 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `api_tokens_list` | List API tokens | read |
+| `api_tokens_scopes` | List available API token scopes | read |
+| `api_tokens_create` | Create an API token | write |
+| `api_tokens_delete` | Delete an API token | write |
+
+#### Keygen (1 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `keygen_get` | Generate a new SECRET_KEY for node configuration | read |
+
+#### Infra billing (12 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `billing_providers_list` | List infrastructure billing providers | read |
+| `billing_provider_get` | Get a billing provider by UUID | read |
+| `billing_nodes_list` | List billing nodes | read |
+| `billing_history_list` | List billing history (paginated) | read |
+| `billing_provider_create` | Create a billing provider | write |
+| `billing_provider_update` | Update a billing provider | write |
+| `billing_provider_delete` | Delete a billing provider | write |
+| `billing_node_create` | Attach a node to a billing provider | write |
+| `billing_node_update` | Set next billing date for billing nodes | write |
+| `billing_node_delete` | Delete a billing node | write |
+| `billing_history_create` | Record a payment | write |
+| `billing_history_delete` | Delete a payment record | write |
+
+#### Snippets (5 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `snippets_list` | List configuration snippets | read |
+| `snippets_create` | Create a configuration snippet | write |
+| `snippets_update` | Replace the content of a snippet | write |
+| `snippets_delete` | Delete a snippet by name | write |
+| `snippets_sync` | Push a snippet to nodes / config profiles that use it | write |
+
+#### Panel settings (2 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `settings_get` | Get Remnawave panel settings | read |
+| `settings_update` | Update Remnawave panel settings | write |
+
+#### Subscription page configs (7 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `sub_page_configs_list` | List all subscription page configurations | read |
+| `sub_page_configs_get` | Get a subscription page config by UUID | read |
+| `sub_page_configs_create` | Create a subscription page configuration | write |
+| `sub_page_configs_update` | Update a subscription page configuration | write |
+| `sub_page_configs_delete` | Delete a subscription page configuration | write |
+| `sub_page_configs_reorder` | Reorder subscription page configurations | write |
+| `sub_page_configs_clone` | Clone a subscription page configuration | write |
+
+#### Node plugins & shared lists (16 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
 | `node_plugins_list` | List node plugins | read |
-| `node_plugins_get` | Get node plugin by UUID | read |
-| `node_plugins_torrent_reports` | Get torrent blocker reports | read |
-| `node_plugins_torrent_stats` | Get torrent blocker stats | read |
-| `node_plugins_create` | Create node plugin | write |
-| `node_plugins_update` | Update node plugin | write |
-| `node_plugins_delete` | Delete node plugin | write |
+| `node_plugins_get` | Get a node plugin by UUID | read |
+| `node_plugins_torrent_reports` | Torrent blocker reports (paginated) | read |
+| `node_plugins_torrent_stats` | Torrent blocker statistics | read |
+| `shared_lists_list` | List node plugin shared lists | read |
+| `node_plugins_create` | Create a node plugin | write |
+| `node_plugins_update` | Update a node plugin | write |
+| `node_plugins_delete` | Delete a node plugin | write |
 | `node_plugins_reorder` | Reorder node plugins | write |
-| `node_plugins_clone` | Clone node plugin | write |
-| `node_plugins_execute` | Execute node plugin | write |
-| `node_plugins_torrent_truncate` | Truncate torrent blocker reports | write |
+| `node_plugins_clone` | Clone a node plugin | write |
+| `node_plugins_sync` | Push a plugin to the nodes that use it | write |
+| `node_plugins_execute` | Execute a plugin command (blockIps / unblockIps / recreateTables) on target nodes | write |
+| `node_plugins_torrent_truncate` | Truncate all torrent blocker reports | write |
+| `shared_lists_create` | Create a shared list | write |
+| `shared_lists_update` | Update a shared list | write |
+| `shared_lists_sync` | Push a shared list to nodes | write |
 
-#### IP Control (5 tools)
+#### Node integrations (5 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `ip_control_fetch_ips` | Fetch IPs for a user | read |
-| `ip_control_get_fetch_ips_result` | Get fetch IPs job result | read |
-| `ip_control_fetch_users_ips` | Fetch users IPs on a node | read |
-| `ip_control_get_fetch_users_ips_result` | Get fetch users IPs job result | read |
-| `ip_control_drop_connections` | Drop user connections | write |
+| `node_integrations_list` | List node integrations | read |
+| `node_integrations_get` | Get a node integration by UUID | read |
+| `node_integrations_create` | Create a node integration | write |
+| `node_integrations_update` | Update a node integration | write |
+| `node_integrations_delete` | Delete a node integration | write |
 
 #### Metadata (4 tools)
 
 | Tool | Description | Mode |
 |------|-------------|------|
-| `metadata_node_get` | Get node metadata | read |
-| `metadata_user_get` | Get user metadata | read |
-| `metadata_node_upsert` | Upsert node metadata | write |
-| `metadata_user_upsert` | Upsert user metadata | write |
+| `metadata_node_get` | Get custom metadata of a node | read |
+| `metadata_user_get` | Get custom metadata of a user | read |
+| `metadata_node_upsert` | Create or replace custom metadata of a node | write |
+| `metadata_user_upsert` | Create or replace custom metadata of a user | write |
 
 ### Resources
 
@@ -395,7 +458,7 @@ Environment variables are passed via `.env` file or `docker-compose.yml`.
 | `remnawave://stats` | Current panel statistics |
 | `remnawave://nodes` | All nodes status |
 | `remnawave://health` | Panel health status |
-| `remnawave://users/{uuid}` | Specific user details |
+| `remnawave://users/{id}` | Specific user details (numeric id) |
 
 ### Prompts
 
@@ -411,14 +474,12 @@ Environment variables are passed via `.env` file or `docker-compose.yml`.
 
 ```
 "Show me all users with expired subscriptions"
+"Find the user with telegram id 123456 and extend them by 30 days"
 "Create user vasya with 50 GB limit for one month"
 "Restart node amsterdam-01"
-"Give me a traffic report for the last week"
-"Disable users who exceeded their traffic limit"
+"Top 10 users by traffic on node fl1 this week"
 "Which nodes are offline right now?"
-"Show billing history"
-"List all node plugins"
-"Get IP connections for user X"
+"Drop all connections of user 42"
 ```
 
 ### Project Structure
@@ -429,32 +490,41 @@ src/
 ├── server.ts                      # McpServer setup
 ├── config.ts                      # Environment config
 ├── client/
-│   └── index.ts                   # Remnawave HTTP client
+│   └── index.ts                   # Remnawave HTTP client (routes from backend-contract)
 ├── tools/
 │   ├── helpers.ts                 # Result formatting helpers
 │   ├── index.ts                   # Tool registration
-│   ├── users.ts                   # User management (27 tools)
-│   ├── nodes.ts                   # Node management (15 tools)
-│   ├── hosts.ts                   # Host management (11 tools)
-│   ├── system.ts                  # System & auth (10 tools)
-│   ├── subscriptions.ts           # Subscriptions (10 tools)
-│   ├── inbounds.ts                # Config profiles & inbounds (9 tools)
-│   ├── squads.ts                  # Internal squads (7 tools)
-│   ├── hwid.ts                    # HWID devices (7 tools)
-│   ├── infra-billing.ts           # Infrastructure billing (12 tools)
-│   ├── node-plugins.ts            # Node plugins (11 tools)
-│   ├── external-squads.ts         # External squads (8 tools)
-│   ├── subscription-page-configs.ts # Subscription page configs (7 tools)
-│   ├── ip-control.ts              # IP control (5 tools)
-│   ├── snippets.ts                # Snippets (4 tools)
-│   ├── metadata.ts                # Node & user metadata (4 tools)
-│   ├── api-tokens.ts              # API tokens (3 tools)
-│   ├── settings.ts                # Panel settings (2 tools)
-│   └── keygen.ts                  # Keygen (1 tool)
+│   ├── users.ts                       # Users (28)
+│   ├── nodes.ts                       # Nodes (15)
+│   ├── hosts.ts                       # Hosts (11)
+│   ├── system.ts                      # System & auth (13)
+│   ├── bandwidth.ts                   # Bandwidth stats (8)
+│   ├── subscriptions.ts               # Subscriptions & templates (13)
+│   ├── inbounds.ts                    # Config profiles & inbounds (9)
+│   ├── squads.ts                      # Internal squads (11)
+│   ├── external-squads.ts             # External squads (8)
+│   ├── hwid.ts                        # HWID devices (7)
+│   ├── connections.ts                 # Connections (7)
+│   ├── api-tokens.ts                  # API tokens (4)
+│   ├── keygen.ts                      # Keygen (1)
+│   ├── infra-billing.ts               # Infra billing (12)
+│   ├── snippets.ts                    # Snippets (5)
+│   ├── settings.ts                    # Panel settings (2)
+│   ├── subscription-page-configs.ts   # Subscription page configs (7)
+│   ├── node-plugins.ts                # Node plugins & shared lists (16)
+│   ├── node-integrations.ts           # Node integrations (5)
+│   ├── metadata.ts                    # Metadata (4)
 ├── resources/
 │   └── index.ts                   # MCP resources
 └── prompts/
     └── index.ts                   # MCP prompts
+```
+
+### Development
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm run build       # typecheck + tsup bundle
 ```
 
 ### License
@@ -467,29 +537,31 @@ MIT
 
 ## MCP-сервер для Remnawave Panel
 
-MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), предоставляющий LLM-клиентам (Claude Desktop, Cursor, Windsurf и др.) инструменты для управления VPN-панелью [Remnawave](https://github.com/remnawave/).
+MCP-сервер ([Model Context Protocol](https://modelcontextprotocol.io)), предоставляющий LLM-клиентам (Claude Desktop, Claude Code, Cursor, Windsurf и др.) инструменты для управления VPN-панелью [Remnawave](https://github.com/remnawave/).
 
-**Версия:** 1.2.0 | **Remnawave API:** 2.7.4
+**Версия:** 2.0.0 | **Панель Remnawave:** 3.4.x | **Контракт:** @remnawave/backend-contract 3.4.13
+
+> Для панели 2.x используйте [релиз 1.2.0](https://github.com/TrackLine/mcp-remnawave/releases) исходного проекта. Версия 2.0.0 рассчитана на API 3.x, обратной совместимости нет (см. [Миграция с 1.x](#миграция-с-1x)).
 
 ### Возможности
 
-- **153 инструмента** — полное управление пользователями, нодами, хостами, подписками, группами, HWID, конфиг-профилями, inbounds, API-токенами, биллингом, сниппетами, внешними группами, настройками, страницами подписок, плагинами нод, IP-контролем и метаданными
-- **3 ресурса** — статистика панели, статус нод, проверка здоровья в реальном времени
+- **186 инструментов** — пользователи, ноды, хосты, подписки, статистика трафика, группы, HWID, конфиг-профили, inbounds, соединения, API-токены, биллинг, сниппеты, внешние группы, настройки, страницы подписок, плагины и интеграции нод, метаданные
+- **3 ресурса** — статистика панели, статус нод, проверка здоровья
 - **5 промптов** — пошаговые сценарии для типичных задач
-- **Readonly-режим** — ограничение до 69 инструментов только для чтения
-- **Поддержка Caddy** — заголовок `X-Api-Key` для панелей за Caddy с кастомным путём
-- **Type-safe** — построен на [@remnawave/backend-contract](https://www.npmjs.com/package/@remnawave/backend-contract) для валидации API-маршрутов
-- **stdio транспорт** — работает с Claude Desktop, Cursor, Windsurf и любым MCP-совместимым клиентом
+- **Readonly-режим** — только 90 инструментов чтения
+- **Поддержка Caddy / Cloudflare Access** — заголовки `X-Api-Key` и `CF-Access-*`
+- **Type-safe** — все маршруты берутся из [@remnawave/backend-contract](https://www.npmjs.com/package/@remnawave/backend-contract); `npm run build` сначала прогоняет проверку типов, поэтому удалённые маршруты ловятся на сборке
+- **stdio транспорт** — работает с любым MCP-совместимым клиентом
 
 ### Требования
 
 - Node.js >= 22
-- Remnawave панель с API-токеном (Настройки > API Tokens)
+- Панель Remnawave **3.4 или новее** с API-токеном (Настройки > API Tokens)
 
 ### Установка
 
 ```bash
-git clone https://github.com/TrackLine/mcp-remnawave.git
+git clone https://github.com/akadorkin/mcp-remnawave.git
 cd mcp-remnawave
 npm install
 npm run build
@@ -504,6 +576,7 @@ npm run build
 | `REMNAWAVE_BASE_URL` | Да | URL панели (например `https://vpn.example.com`) |
 | `REMNAWAVE_API_TOKEN` | Да | API-токен из настроек панели |
 | `REMNAWAVE_API_KEY` | Нет | API-ключ для аутентификации через Caddy reverse proxy |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Нет | Сервисный токен Cloudflare Access |
 | `REMNAWAVE_READONLY` | Нет | `true` для включения режима только чтения |
 
 ```env
@@ -513,42 +586,42 @@ REMNAWAVE_API_TOKEN=ваш-api-токен
 
 ### Caddy с кастомным путём
 
-Если ваша панель Remnawave развёрнута за [Caddy с кастомным путём и защитой API-ключом](https://docs.remnawave.com/docs/security/caddy-with-custom-path/), укажите полный путь в base URL и предоставьте API-ключ:
+Если панель развёрнута за [Caddy с кастомным путём и защитой API-ключом](https://docs.remnawave.com/docs/security/caddy-with-custom-path/), укажите полный путь в base URL и API-ключ:
 
 ```env
 REMNAWAVE_BASE_URL=https://example.com/your-secret-path/api
 REMNAWAVE_API_KEY=ваш-caddy-api-ключ
 ```
 
-Заголовок `X-Api-Key` будет автоматически добавляться к каждому запросу.
+Заголовок `X-Api-Key` будет добавляться к каждому запросу автоматически.
 
 ### Режим Readonly
 
-Установите `REMNAWAVE_READONLY=true`, чтобы отключить все операции записи (создание, обновление, удаление, включение, отключение, перезапуск, отзыв, сброс). Будут зарегистрированы только инструменты чтения.
+Установите `REMNAWAVE_READONLY=true`, чтобы отключить все операции записи (создание, обновление, удаление, включение, отключение, перезапуск, отзыв, сброс, drop). Инструменты, которые лишь *запускают* сбор данных (`connections_by_user`, `connections_by_node`, `connections_geocheck`), считаются инструментами чтения: на панели они ничего не меняют.
 
-Полезно для мониторинговых дашбордов или общих окружений, где нужно исключить случайные изменения.
-
-В readonly-режиме количество доступных инструментов сокращается с 153 до 69:
+В readonly-режиме доступно 90 инструментов из 186:
 
 | Категория | Доступные инструменты |
 |-----------|----------------------|
-| Пользователи (10) | `users_list`, `users_get`, `users_get_by_username`, `users_get_by_short_uuid`, `users_get_by_telegram_id`, `users_get_by_email`, `users_get_by_tag`, `users_get_by_subscription_uuid`, `users_tags_list`, `users_resolve` |
+| Пользователи (10) | `users_list`, `users_find`, `users_stream`, `users_get`, `users_get_by_username`, `users_get_by_short_uuid`, `users_tags_list`, `users_resolve`, `users_accessible_nodes`, `users_subscription_request_history` |
 | Ноды (3) | `nodes_list`, `nodes_get`, `nodes_tags_list` |
 | Хосты (3) | `hosts_list`, `hosts_get`, `hosts_tags_list` |
-| Система (10) | все инструменты (только чтение по природе) |
-| Подписки (10) | все инструменты (только чтение по природе) |
-| Конфиг-профили и Inbounds (5) | `config_profiles_list`, `config_profiles_get`, `inbounds_list`, `config_profiles_get_inbounds`, `config_profiles_get_computed_config` |
-| Внутренние группы (2) | `squads_list`, `squads_accessible_nodes` |
-| HWID (4) | `hwid_devices_list`, `hwid_devices_list_all`, `hwid_stats`, `hwid_top_users` |
-| API-токены (1) | `api_tokens_list` |
-| Keygen (1) | `keygen_get` |
-| Биллинг (4) | `billing_providers_list`, `billing_provider_get`, `billing_nodes_list`, `billing_history_list` |
-| Сниппеты (1) | `snippets_list` |
+| Система и авторизация (13) | `system_stats`, `system_bandwidth_stats`, `system_nodes_metrics`, `system_nodes_statistics`, `system_stats_recap`, `system_stats_digest`, `system_http_stats`, `system_health`, `system_metadata`, `system_configuration`, `system_generate_x25519`, `auth_status`, `system_srr_matcher` |
+| Статистика трафика (8) | `bandwidth_nodes_usage`, `bandwidth_nodes_realtime`, `bandwidth_node_users_usage`, `bandwidth_nodes_users_usage`, `bandwidth_nodes_usage_by_uuids`, `bandwidth_user_usage`, `bandwidth_squad_usage`, `bandwidth_squad_user_usage` |
+| Подписки и шаблоны (13) | `subscriptions_list`, `subscriptions_get_by_id`, `subscriptions_get_by_username`, `subscriptions_get_by_short_uuid`, `subscription_info`, `subscriptions_get_raw_by_short_uuid`, `subscriptions_get_subpage_config`, `subscriptions_get_connection_keys`, `subscription_request_history_list`, `subscription_request_history_stats`, `sub_templates_list`, `sub_templates_get`, `sub_settings_get` |
+| Конфиг-профили и inbounds (5) | `config_profiles_list`, `config_profiles_get`, `inbounds_list`, `config_profiles_get_inbounds`, `config_profiles_get_computed_config` |
+| Внутренние группы (squads) (3) | `squads_list`, `squads_get`, `squads_accessible_nodes` |
 | Внешние группы (2) | `external_squads_list`, `external_squads_get` |
-| Настройки (1) | `settings_get` |
+| HWID-устройства (4) | `hwid_devices_list`, `hwid_devices_list_all`, `hwid_stats`, `hwid_top_users` |
+| Соединения (6) | `connections_by_user`, `connections_by_user_result`, `connections_by_node`, `connections_by_node_result`, `connections_geocheck`, `connections_geocheck_result` |
+| API-токены (2) | `api_tokens_list`, `api_tokens_scopes` |
+| Keygen (1) | `keygen_get` |
+| Биллинг инфраструктуры (4) | `billing_providers_list`, `billing_provider_get`, `billing_nodes_list`, `billing_history_list` |
+| Сниппеты (1) | `snippets_list` |
+| Настройки панели (1) | `settings_get` |
 | Страницы подписок (2) | `sub_page_configs_list`, `sub_page_configs_get` |
-| Плагины нод (4) | `node_plugins_list`, `node_plugins_get`, `node_plugins_torrent_reports`, `node_plugins_torrent_stats` |
-| IP-контроль (4) | `ip_control_fetch_ips`, `ip_control_get_fetch_ips_result`, `ip_control_fetch_users_ips`, `ip_control_get_fetch_users_ips_result` |
+| Плагины нод и общие списки (5) | `node_plugins_list`, `node_plugins_get`, `node_plugins_torrent_reports`, `node_plugins_torrent_stats`, `shared_lists_list` |
+| Интеграции нод (2) | `node_integrations_list`, `node_integrations_get` |
 | Метаданные (2) | `metadata_node_get`, `metadata_user_get` |
 
 ### Использование с Claude Desktop
@@ -560,38 +633,30 @@ REMNAWAVE_API_KEY=ваш-caddy-api-ключ
   "mcpServers": {
     "remnawave": {
       "command": "node",
-      "args": ["/абсолютный/путь/к/remnawave-mcp/dist/index.js"],
+      "args": ["/абсолютный/путь/к/mcp-remnawave/dist/index.js"],
       "env": {
         "REMNAWAVE_BASE_URL": "https://vpn.example.com",
         "REMNAWAVE_API_TOKEN": "ваш-api-токен",
-        "REMNAWAVE_API_KEY": "ваш-caddy-api-ключ",
-        "REMNAWAVE_READONLY": "false"
+        "REMNAWAVE_READONLY": "true"
       }
     }
   }
 }
+```
+
+### Использование с Claude Code
+
+```bash
+claude mcp add -s user remnawave \
+  -e REMNAWAVE_BASE_URL=https://vpn.example.com \
+  -e REMNAWAVE_API_TOKEN=ваш-api-токен \
+  -e REMNAWAVE_READONLY=true \
+  -- node /абсолютный/путь/к/mcp-remnawave/dist/index.js
 ```
 
 ### Использование с Cursor / Windsurf
 
-Добавьте в `.cursor/mcp.json` или `.windsurf/mcp.json` вашего проекта:
-
-```json
-{
-  "mcpServers": {
-    "remnawave": {
-      "command": "node",
-      "args": ["/абсолютный/путь/к/remnawave-mcp/dist/index.js"],
-      "env": {
-        "REMNAWAVE_BASE_URL": "https://vpn.example.com",
-        "REMNAWAVE_API_TOKEN": "ваш-api-токен",
-        "REMNAWAVE_API_KEY": "ваш-caddy-api-ключ",
-        "REMNAWAVE_READONLY": "false"
-      }
-    }
-  }
-}
-```
+Добавьте в `.cursor/mcp.json` или `.windsurf/mcp.json` проекта тот же JSON, что и для Claude Desktop.
 
 ### Docker
 
@@ -600,252 +665,59 @@ npm run build
 docker compose up -d
 ```
 
-Переменные окружения передаются через `.env` файл или `docker-compose.yml`.
+Переменные окружения передаются через `.env` или `docker-compose.yml`.
+
+### Миграция с 1.x
+
+Remnawave 3.x поменял идентификаторы, поэтому изменились параметры большинства инструментов для пользователей:
+
+| 1.x | 2.0 | Примечание |
+|-----|-----|------------|
+| `uuid` (пользователь) | `id` (число) | Пользователь адресуется числовым `id`; старый UUID теперь называется `vlessUuid` и является только credential'ом |
+| `userUuid` (HWID) | `userId` | |
+| `uuids` в `users_bulk_*` | `userIds` | числа |
+| `users_get_by_telegram_id`, `_by_email`, `_by_tag`, `_by_id`, `_by_subscription_uuid` | `users_find` / фильтры `users_list` / `users_stream` | Отдельные маршруты поиска удалены из API |
+| `subscriptions_get_by_uuid` | `subscriptions_get_by_id` | |
+| `hosts_bulk_set_inbound`, `hosts_bulk_set_port` | `hosts_bulk_update` | Массово применяется любое поле хоста |
+| `tag` (хост) | `tags` (массив) | `allowInsecure` удалён |
+| `excludedInternalSquads` (хост) | `internalSquads` + `internalSquadsMode` (`EXCLUDE` / `ALLOW_ONLY`) | |
+| `ip_control_*` | `connections_*` | `drop` принимает `userIds` |
+| `squads_add_users` (в 1.x **добавлял ВСЕХ пользователей**: тело запроса игнорировалось) | `squads_add_users` с `userIds`; для старого поведения — `squads_add_all_users` | То же для `remove` и внешних групп |
+| `api_tokens_create { tokenName }` | `{ name, expiresInDays, scopes? }` | |
+| `billing_node_create` | `name` и `nextBillingAt` теперь обязательны | |
+| `nodes_restart` | принимает `forceRestart` (по умолчанию `false`) | 1.x не слал тело и не проходил валидацию |
+| `remnawave://users/{uuid}` | `remnawave://users/{id}` | |
+
+Новое в 2.0: `users_extend`, `users_stream`, `users_accessible_nodes`, `users_subscription_request_history`, `bandwidth_*`, `system_stats_digest`, `system_http_stats`, `system_configuration`, `connections_geocheck`, `node_integrations_*`, `shared_lists_*`, `*_sync`, `api_tokens_scopes`, `sub_templates_*`, `sub_settings_get`, `hosts_reorder`, `squads_get`, `squads_reorder`.
+
+Не вынесено в инструменты (нет в панели 3.4.3 или меняется между релизами 3.4.x): get/set тегов для профилей/групп/шаблонов, SSH-тикеты нод, удаление и поиск по имени для shared-lists.
 
 ### Доступные инструменты
 
-#### Пользователи (27 инструментов)
+Полный перечень с описаниями — в разделе [Available Tools](#available-tools) выше. Сводка по категориям:
 
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `users_list` | Список пользователей с пагинацией | read |
-| `users_get` | Получить пользователя по UUID | read |
-| `users_get_by_username` | Получить пользователя по username | read |
-| `users_get_by_short_uuid` | Получить пользователя по short UUID | read |
-| `users_get_by_telegram_id` | Получить пользователя по Telegram ID | read |
-| `users_get_by_email` | Получить пользователя по email | read |
-| `users_get_by_tag` | Получить пользователя по тегу | read |
-| `users_get_by_subscription_uuid` | Получить пользователя по UUID подписки | read |
-| `users_tags_list` | Список тегов пользователей | read |
-| `users_resolve` | Поиск пользователей по нескольким критериям | read |
-| `users_create` | Создать нового пользователя | write |
-| `users_update` | Обновить настройки пользователя | write |
-| `users_delete` | Удалить пользователя | write |
-| `users_enable` | Включить пользователя | write |
-| `users_disable` | Отключить пользователя | write |
-| `users_revoke_subscription` | Отозвать подписку (перегенерировать ссылку) | write |
-| `users_reset_traffic` | Сбросить счётчик трафика | write |
-| `users_bulk_delete_by_status` | Массовое удаление по статусу | write |
-| `users_bulk_update` | Массовое обновление | write |
-| `users_bulk_reset_traffic` | Массовый сброс трафика | write |
-| `users_bulk_revoke_subscription` | Массовый отзыв подписок | write |
-| `users_bulk_delete` | Массовое удаление | write |
-| `users_bulk_update_squads` | Массовое обновление групп | write |
-| `users_bulk_extend_expiration` | Массовое продление срока | write |
-| `users_bulk_all_update` | Обновить всех пользователей | write |
-| `users_bulk_all_reset_traffic` | Сбросить трафик всех пользователей | write |
-| `users_bulk_all_extend_expiration` | Продлить срок всех пользователей | write |
-
-#### Ноды (15 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `nodes_list` | Список всех нод | read |
-| `nodes_get` | Получить ноду по UUID | read |
-| `nodes_tags_list` | Список тегов нод | read |
-| `nodes_create` | Создать новую ноду | write |
-| `nodes_update` | Обновить настройки ноды | write |
-| `nodes_delete` | Удалить ноду | write |
-| `nodes_enable` | Включить ноду | write |
-| `nodes_disable` | Отключить ноду | write |
-| `nodes_restart` | Перезапустить ноду | write |
-| `nodes_restart_all` | Перезапустить все ноды | write |
-| `nodes_reset_traffic` | Сбросить трафик ноды | write |
-| `nodes_reorder` | Переупорядочить ноды | write |
-| `nodes_bulk_profile_modification` | Массовое изменение профилей нод | write |
-| `nodes_bulk_actions` | Массовые действия с нодами | write |
-| `nodes_bulk_update` | Массовое обновление нод | write |
-
-#### Хосты (11 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `hosts_list` | Список всех хостов | read |
-| `hosts_get` | Получить хост по UUID | read |
-| `hosts_tags_list` | Список тегов хостов | read |
-| `hosts_create` | Создать новый хост | write |
-| `hosts_update` | Обновить настройки хоста | write |
-| `hosts_delete` | Удалить хост | write |
-| `hosts_bulk_enable` | Массовое включение хостов | write |
-| `hosts_bulk_disable` | Массовое отключение хостов | write |
-| `hosts_bulk_delete` | Массовое удаление хостов | write |
-| `hosts_bulk_set_inbound` | Массовая установка inbound | write |
-| `hosts_bulk_set_port` | Массовая установка порта | write |
-
-#### Система (10 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `system_stats` | Статистика панели (пользователи, ноды, трафик, CPU, память) | read |
-| `system_bandwidth_stats` | Статистика пропускной способности | read |
-| `system_nodes_metrics` | Метрики нод | read |
-| `system_nodes_statistics` | Статистика нод | read |
-| `system_health` | Проверка здоровья панели | read |
-| `system_metadata` | Версия и метаданные панели | read |
-| `system_generate_x25519` | Генерация пары ключей X25519 | read |
-| `auth_status` | Проверка статуса аутентификации | read |
-| `system_stats_recap` | Обзор статистики | read |
-| `system_srr_matcher` | Тест SRR-правил маршрутизации | read |
-
-#### Подписки (10 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `subscriptions_list` | Список всех подписок | read |
-| `subscriptions_get_by_uuid` | Подписка по UUID | read |
-| `subscriptions_get_by_username` | Подписка по username | read |
-| `subscriptions_get_by_short_uuid` | Подписка по short UUID | read |
-| `subscriptions_get_raw_by_short_uuid` | Сырая подписка по short UUID | read |
-| `subscriptions_get_subpage_config` | Конфиг субстраницы подписки | read |
-| `subscriptions_get_connection_keys` | Ключи подключения по UUID | read |
-| `subscription_info` | Информация о подписке | read |
-| `subscription_request_history_list` | История запросов подписок | read |
-| `subscription_request_history_stats` | Статистика запросов подписок | read |
-
-#### Конфиг-профили и Inbounds (9 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `config_profiles_list` | Список конфиг-профилей | read |
-| `config_profiles_get` | Получить конфиг-профиль по UUID | read |
-| `inbounds_list` | Список всех inbounds | read |
-| `config_profiles_get_inbounds` | Inbounds по UUID профиля | read |
-| `config_profiles_get_computed_config` | Вычисленный конфиг по UUID профиля | read |
-| `config_profiles_create` | Создать конфиг-профиль | write |
-| `config_profiles_update` | Обновить конфиг-профиль | write |
-| `config_profiles_delete` | Удалить конфиг-профиль | write |
-| `config_profiles_reorder` | Переупорядочить конфиг-профили | write |
-
-#### Внутренние группы (7 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `squads_list` | Список групп | read |
-| `squads_accessible_nodes` | Доступные ноды группы | read |
-| `squads_create` | Создать группу | write |
-| `squads_update` | Обновить группу | write |
-| `squads_delete` | Удалить группу | write |
-| `squads_add_users` | Добавить пользователей в группу | write |
-| `squads_remove_users` | Убрать пользователей из группы | write |
-
-#### HWID-устройства (7 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `hwid_devices_list` | Список устройств пользователя | read |
-| `hwid_devices_list_all` | Список всех устройств | read |
-| `hwid_stats` | Статистика HWID | read |
-| `hwid_top_users` | Топ пользователей по устройствам | read |
-| `hwid_device_create` | Создать HWID-устройство | write |
-| `hwid_device_delete` | Удалить конкретное устройство | write |
-| `hwid_devices_delete_all` | Удалить все устройства пользователя | write |
-
-#### API-токены (3 инструмента)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `api_tokens_list` | Список API-токенов | read |
-| `api_tokens_create` | Создать API-токен | write |
-| `api_tokens_delete` | Удалить API-токен | write |
-
-#### Keygen (1 инструмент)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `keygen_get` | Получить данные keygen | read |
-
-#### Биллинг инфраструктуры (12 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `billing_providers_list` | Список провайдеров биллинга | read |
-| `billing_provider_get` | Получить провайдера по UUID | read |
-| `billing_nodes_list` | Список биллинговых нод | read |
-| `billing_history_list` | История биллинга | read |
-| `billing_provider_create` | Создать провайдера | write |
-| `billing_provider_update` | Обновить провайдера | write |
-| `billing_provider_delete` | Удалить провайдера | write |
-| `billing_node_create` | Создать биллинговую ноду | write |
-| `billing_node_update` | Обновить биллинговую ноду | write |
-| `billing_node_delete` | Удалить биллинговую ноду | write |
-| `billing_history_create` | Создать запись истории | write |
-| `billing_history_delete` | Удалить запись истории | write |
-
-#### Сниппеты (4 инструмента)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `snippets_list` | Список сниппетов | read |
-| `snippets_create` | Создать сниппет | write |
-| `snippets_update` | Обновить сниппет | write |
-| `snippets_delete` | Удалить сниппет | write |
-
-#### Внешние группы (8 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `external_squads_list` | Список внешних групп | read |
-| `external_squads_get` | Получить внешнюю группу по UUID | read |
-| `external_squads_create` | Создать внешнюю группу | write |
-| `external_squads_update` | Обновить внешнюю группу | write |
-| `external_squads_delete` | Удалить внешнюю группу | write |
-| `external_squads_add_users` | Добавить пользователей | write |
-| `external_squads_remove_users` | Убрать пользователей | write |
-| `external_squads_reorder` | Переупорядочить | write |
-
-#### Настройки (2 инструмента)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `settings_get` | Получить настройки панели | read |
-| `settings_update` | Обновить настройки панели | write |
-
-#### Страницы подписок (7 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `sub_page_configs_list` | Список конфигов страниц | read |
-| `sub_page_configs_get` | Получить конфиг страницы | read |
-| `sub_page_configs_create` | Создать конфиг страницы | write |
-| `sub_page_configs_update` | Обновить конфиг страницы | write |
-| `sub_page_configs_delete` | Удалить конфиг страницы | write |
-| `sub_page_configs_reorder` | Переупорядочить | write |
-| `sub_page_configs_clone` | Клонировать конфиг | write |
-
-#### Плагины нод (11 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `node_plugins_list` | Список плагинов | read |
-| `node_plugins_get` | Получить плагин по UUID | read |
-| `node_plugins_torrent_reports` | Отчёты торрент-блокировщика | read |
-| `node_plugins_torrent_stats` | Статистика торрент-блокировщика | read |
-| `node_plugins_create` | Создать плагин | write |
-| `node_plugins_update` | Обновить плагин | write |
-| `node_plugins_delete` | Удалить плагин | write |
-| `node_plugins_reorder` | Переупорядочить плагины | write |
-| `node_plugins_clone` | Клонировать плагин | write |
-| `node_plugins_execute` | Выполнить плагин | write |
-| `node_plugins_torrent_truncate` | Очистить отчёты торрент-блокировщика | write |
-
-#### IP-контроль (5 инструментов)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `ip_control_fetch_ips` | Получить IP пользователя | read |
-| `ip_control_get_fetch_ips_result` | Результат запроса IP | read |
-| `ip_control_fetch_users_ips` | Получить IP пользователей на ноде | read |
-| `ip_control_get_fetch_users_ips_result` | Результат запроса IP пользователей | read |
-| `ip_control_drop_connections` | Сбросить соединения | write |
-
-#### Метаданные (4 инструмента)
-
-| Инструмент | Описание | Режим |
-|------------|----------|-------|
-| `metadata_node_get` | Получить метаданные ноды | read |
-| `metadata_user_get` | Получить метаданные пользователя | read |
-| `metadata_node_upsert` | Обновить метаданные ноды | write |
-| `metadata_user_upsert` | Обновить метаданные пользователя | write |
+| Категория | Всего | Чтение |
+|-----------|-------|--------|
+| Пользователи | 28 | 10 |
+| Ноды | 15 | 3 |
+| Хосты | 11 | 3 |
+| Система и авторизация | 13 | 13 |
+| Статистика трафика | 8 | 8 |
+| Подписки и шаблоны | 13 | 13 |
+| Конфиг-профили и inbounds | 9 | 5 |
+| Внутренние группы | 11 | 3 |
+| Внешние группы | 8 | 2 |
+| HWID-устройства | 7 | 4 |
+| Соединения | 7 | 6 |
+| API-токены | 4 | 2 |
+| Keygen | 1 | 1 |
+| Биллинг инфраструктуры | 12 | 4 |
+| Сниппеты | 5 | 1 |
+| Настройки панели | 2 | 1 |
+| Страницы подписок | 7 | 2 |
+| Плагины нод и общие списки | 16 | 5 |
+| Интеграции нод | 5 | 2 |
+| Метаданные | 4 | 2 |
 
 ### Ресурсы
 
@@ -854,7 +726,7 @@ docker compose up -d
 | `remnawave://stats` | Текущая статистика панели |
 | `remnawave://nodes` | Статус всех нод |
 | `remnawave://health` | Состояние здоровья панели |
-| `remnawave://users/{uuid}` | Данные конкретного пользователя |
+| `remnawave://users/{id}` | Данные пользователя по числовому id |
 
 ### Промпты
 
@@ -869,15 +741,13 @@ docker compose up -d
 ### Примеры запросов
 
 ```
-«Покажи мне всех пользователей с истёкшей подпиской»
+«Покажи всех пользователей с истёкшей подпиской»
+«Найди пользователя с telegram id 123456 и продли на 30 дней»
 «Создай пользователя vasya с лимитом 50 ГБ на месяц»
 «Перезапусти ноду amsterdam-01»
-«Дай отчёт по трафику за последнюю неделю»
-«Отключи пользователей, которые превысили лимит трафика»
+«Топ-10 пользователей по трафику на ноде fl1 за неделю»
 «Какие ноды сейчас офлайн?»
-«Покажи историю биллинга»
-«Список плагинов нод»
-«Получи IP-соединения пользователя X»
+«Сбрось все соединения пользователя 42»
 ```
 
 ### Структура проекта
@@ -888,32 +758,41 @@ src/
 ├── server.ts                      # Настройка McpServer
 ├── config.ts                      # Конфигурация окружения
 ├── client/
-│   └── index.ts                   # HTTP-клиент Remnawave
+│   └── index.ts                   # HTTP-клиент Remnawave (маршруты из backend-contract)
 ├── tools/
 │   ├── helpers.ts                 # Хелперы форматирования
 │   ├── index.ts                   # Регистрация инструментов
-│   ├── users.ts                   # Управление пользователями (27)
-│   ├── nodes.ts                   # Управление нодами (15)
-│   ├── hosts.ts                   # Управление хостами (11)
-│   ├── system.ts                  # Система и авторизация (10)
-│   ├── subscriptions.ts           # Подписки (10)
-│   ├── inbounds.ts                # Конфиг-профили и inbounds (9)
-│   ├── squads.ts                  # Внутренние группы (7)
-│   ├── hwid.ts                    # HWID-устройства (7)
-│   ├── infra-billing.ts           # Биллинг инфраструктуры (12)
-│   ├── node-plugins.ts            # Плагины нод (11)
-│   ├── external-squads.ts         # Внешние группы (8)
-│   ├── subscription-page-configs.ts # Страницы подписок (7)
-│   ├── ip-control.ts              # IP-контроль (5)
-│   ├── snippets.ts                # Сниппеты (4)
-│   ├── metadata.ts                # Метаданные нод и пользователей (4)
-│   ├── api-tokens.ts              # API-токены (3)
-│   ├── settings.ts                # Настройки панели (2)
-│   └── keygen.ts                  # Keygen (1)
+│   ├── users.ts                       # Пользователи (28)
+│   ├── nodes.ts                       # Ноды (15)
+│   ├── hosts.ts                       # Хосты (11)
+│   ├── system.ts                      # Система и авторизация (13)
+│   ├── bandwidth.ts                   # Статистика трафика (8)
+│   ├── subscriptions.ts               # Подписки и шаблоны (13)
+│   ├── inbounds.ts                    # Конфиг-профили и inbounds (9)
+│   ├── squads.ts                      # Внутренние группы (squads) (11)
+│   ├── external-squads.ts             # Внешние группы (8)
+│   ├── hwid.ts                        # HWID-устройства (7)
+│   ├── connections.ts                 # Соединения (7)
+│   ├── api-tokens.ts                  # API-токены (4)
+│   ├── keygen.ts                      # Keygen (1)
+│   ├── infra-billing.ts               # Биллинг инфраструктуры (12)
+│   ├── snippets.ts                    # Сниппеты (5)
+│   ├── settings.ts                    # Настройки панели (2)
+│   ├── subscription-page-configs.ts   # Страницы подписок (7)
+│   ├── node-plugins.ts                # Плагины нод и общие списки (16)
+│   ├── node-integrations.ts           # Интеграции нод (5)
+│   ├── metadata.ts                    # Метаданные (4)
 ├── resources/
 │   └── index.ts                   # MCP-ресурсы
 └── prompts/
     └── index.ts                   # MCP-промпты
+```
+
+### Разработка
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm run build       # проверка типов + сборка tsup
 ```
 
 ### Лицензия

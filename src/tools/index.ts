@@ -16,7 +16,9 @@ import { registerExternalSquadTools } from './external-squads.js';
 import { registerSettingsTools } from './settings.js';
 import { registerSubPageConfigTools } from './subscription-page-configs.js';
 import { registerNodePluginTools } from './node-plugins.js';
-import { registerIpControlTools } from './ip-control.js';
+import { registerNodeIntegrationTools } from './node-integrations.js';
+import { registerConnectionTools } from './connections.js';
+import { registerBandwidthTools } from './bandwidth.js';
 import { registerMetadataTools } from './metadata.js';
 
 export function registerAllTools(server: McpServer, client: RemnawaveClient, readonly: boolean) {
@@ -24,18 +26,20 @@ export function registerAllTools(server: McpServer, client: RemnawaveClient, rea
     registerNodeTools(server, client, readonly);
     registerHostTools(server, client, readonly);
     registerSystemTools(server, client);
+    registerBandwidthTools(server, client);
     registerSubscriptionTools(server, client);
     registerInboundTools(server, client, readonly);
     registerSquadTools(server, client, readonly);
+    registerExternalSquadTools(server, client, readonly);
     registerHwidTools(server, client, readonly);
+    registerConnectionTools(server, client, readonly);
     registerApiTokenTools(server, client, readonly);
     registerKeygenTools(server, client);
     registerInfraBillingTools(server, client, readonly);
     registerSnippetTools(server, client, readonly);
-    registerExternalSquadTools(server, client, readonly);
     registerSettingsTools(server, client, readonly);
     registerSubPageConfigTools(server, client, readonly);
     registerNodePluginTools(server, client, readonly);
-    registerIpControlTools(server, client, readonly);
+    registerNodeIntegrationTools(server, client, readonly);
     registerMetadataTools(server, client, readonly);
 }

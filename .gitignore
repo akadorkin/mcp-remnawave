@@ -22,3 +22,5 @@ Thumbs.db
 
 .claude/
 test-tools.mjs
+# local wrapper (personal env file)
+run.sh
