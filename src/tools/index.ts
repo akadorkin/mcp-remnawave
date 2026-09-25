@@ -1,10 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { RemnawaveClient } from '../client/index.js';
+import { Ctx } from '../core/plan.js';
 import { registerUserTools } from './users.js';
 import { registerNodeTools } from './nodes.js';
 import { registerHostTools } from './hosts.js';
 import { registerSystemTools } from './system.js';
 import { registerSubscriptionTools } from './subscriptions.js';
+import { registerSubscriptionRenderTools } from './subscription-render.js';
 import { registerInboundTools } from './inbounds.js';
 import { registerSquadTools } from './squads.js';
 import { registerHwidTools } from './hwid.js';
@@ -20,16 +21,25 @@ import { registerNodeIntegrationTools } from './node-integrations.js';
 import { registerConnectionTools } from './connections.js';
 import { registerBandwidthTools } from './bandwidth.js';
 import { registerMetadataTools } from './metadata.js';
+import { registerFleetTools } from './fleet.js';
+import { registerMaintenanceTools } from './maintenance.js';
 
-export function registerAllTools(server: McpServer, client: RemnawaveClient, readonly: boolean) {
+export function registerAllTools(server: McpServer, ctx: Ctx) {
+    const { client } = ctx;
+    const readonly = ctx.config.readonly;
+    // cross-cutting views and safe editing
+    registerFleetTools(server, ctx);
+    registerMaintenanceTools(server, ctx);
+    registerSubscriptionRenderTools(server, ctx);
+    // domain tools
     registerUserTools(server, client, readonly);
-    registerNodeTools(server, client, readonly);
-    registerHostTools(server, client, readonly);
+    registerNodeTools(server, ctx);
+    registerHostTools(server, ctx);
+    registerInboundTools(server, ctx);
+    registerSubscriptionTools(server, ctx);
+    registerSquadTools(server, ctx);
     registerSystemTools(server, client);
     registerBandwidthTools(server, client);
-    registerSubscriptionTools(server, client);
-    registerInboundTools(server, client, readonly);
-    registerSquadTools(server, client, readonly);
     registerExternalSquadTools(server, client, readonly);
     registerHwidTools(server, client, readonly);
     registerConnectionTools(server, client, readonly);

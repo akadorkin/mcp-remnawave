@@ -1,7 +1,7 @@
 {
   "name": "remnawave-mcp",
-  "version": "2.0.0",
-  "description": "MCP server for Remnawave proxy management panel (panel 3.4+)",
+  "version": "3.0.0",
+  "description": "MCP server for the Remnawave panel (3.4+): compact views, fleet-wide joins, safe dry-run/apply edits of profiles, templates, pools and hosts",
   "type": "module",
   "bin": {
     "remnawave-mcp": "dist/index.js"
@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && tsup",
     "dev": "tsup --watch",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "docs:tools": "node scripts/gen-tools-doc.mjs"
   },
   "keywords": [
     "mcp",

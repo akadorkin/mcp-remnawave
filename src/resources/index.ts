@@ -1,10 +1,9 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { RemnawaveClient } from '../client/index.js';
+import { Ctx } from '../core/plan.js';
+import { nodeRow } from '../core/views.js';
 
-export function registerAllResources(
-    server: McpServer,
-    client: RemnawaveClient,
-) {
+export function registerAllResources(server: McpServer, ctx: Ctx) {
+    const { client } = ctx;
     server.resource(
         'panel-stats',
         'remnawave://stats',
@@ -35,7 +34,8 @@ export function registerAllResources(
             mimeType: 'application/json',
         },
         async () => {
-            const nodes = await client.getNodes();
+            const idx = await ctx.fleet.index();
+            const nodes = idx.nodes.map((n) => nodeRow(n, idx));
             return {
                 contents: [
                     {
@@ -80,7 +80,7 @@ export function registerAllResources(
         },
         async (uri, params) => {
             const id = Number(params.id);
-            const user = await client.getUserById(id);
+            const user = ctx.out.redact(await client.getUserById(id));
             return {
                 contents: [
                     {

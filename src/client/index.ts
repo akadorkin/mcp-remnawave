@@ -4,17 +4,64 @@ import { Config } from '../config.js';
 type Params = Record<string, unknown>;
 type Query = Record<string, unknown> | undefined;
 
+export interface RequestOptions {
+    /** Safe to repeat on timeouts / 5xx (GET always is). */
+    idempotent?: boolean;
+    /** Override the configured timeout. */
+    timeoutMs?: number;
+}
+
+/** Error from the panel, with the zod issues it sent back instead of a bare "Validation failed". */
+export class RemnawaveApiError extends Error {
+    constructor(
+        readonly status: number,
+        readonly method: string,
+        readonly path: string,
+        readonly apiMessage: string,
+        readonly errorCode?: string,
+        readonly issues: string[] = [],
+    ) {
+        const detail = issues.length ? `\n  - ${issues.join('\n  - ')}` : '';
+        super(`Remnawave API error (${status} ${method} ${path}): ${apiMessage}${errorCode ? ` [${errorCode}]` : ''}${detail}`);
+    }
+}
+
+function formatIssues(errors: unknown): string[] {
+    if (!Array.isArray(errors)) return [];
+    return errors.slice(0, 20).map((e) => {
+        if (!e || typeof e !== 'object') return String(e);
+        const o = e as Record<string, unknown>;
+        const p = Array.isArray(o.path) && o.path.length ? o.path.join('.') : '(body)';
+        const extra = o.maximum !== undefined ? ` (max ${o.maximum})` : o.minimum !== undefined ? ` (min ${o.minimum})` : '';
+        return `${p}: ${o.message ?? o.code ?? JSON.stringify(o)}${extra}`;
+    });
+}
+
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
  * Thin HTTP client over the Remnawave REST API (panel 3.4+).
  * All paths come from @remnawave/backend-contract so a contract bump
  * surfaces removed or renamed routes as type errors at build time.
+ *
+ * The panel drops requests under load (the templates endpoint in particular
+ * times out when hammered), so calls are throttled and idempotent ones retried.
  */
 export class RemnawaveClient {
     private baseUrl: string;
     private headers: Record<string, string>;
+    private timeoutMs: number;
+    private active = 0;
+    private waiters: Array<() => void> = [];
+    private lastStart = 0;
+    private writeListeners: Array<(method: string, path: string) => void> = [];
+    private static MAX_CONCURRENCY = 4;
+    private static MIN_INTERVAL_MS = 80;
 
     constructor(config: Config) {
         this.baseUrl = config.baseUrl;
+        this.timeoutMs = config.requestTimeoutMs;
         this.headers = {
             Authorization: `Bearer ${config.apiToken}`,
             'Content-Type': 'application/json',
@@ -30,6 +77,11 @@ export class RemnawaveClient {
         }
     }
 
+    /** Called after every successful non-GET request (used to drop cached snapshots). */
+    onWrite(fn: (method: string, path: string) => void) {
+        this.writeListeners.push(fn);
+    }
+
     /** Serialise a query object; arrays/objects are JSON-encoded (panel expects `filters=[...]`). */
     private qs(query: Query): string {
         if (!query) return '';
@@ -42,48 +94,92 @@ export class RemnawaveClient {
         return s ? `?${s}` : '';
     }
 
-    private async request<T = unknown>(
-        method: string,
-        path: string,
-        body?: unknown,
-        query?: Query,
-    ): Promise<T> {
+    private async acquire() {
+        while (this.active >= RemnawaveClient.MAX_CONCURRENCY) {
+            await new Promise<void>((r) => this.waiters.push(r));
+        }
+        this.active++;
+        const wait = this.lastStart + RemnawaveClient.MIN_INTERVAL_MS - Date.now();
+        this.lastStart = Math.max(Date.now(), this.lastStart + RemnawaveClient.MIN_INTERVAL_MS);
+        if (wait > 0) await sleep(wait);
+    }
+
+    private release() {
+        this.active--;
+        this.waiters.shift()?.();
+    }
+
+    private async once(method: string, path: string, body: unknown, query: Query, timeoutMs: number) {
         const url = `${this.baseUrl}${path}${this.qs(query)}`;
-        const options: RequestInit = { method, headers: this.headers };
+        const options: RequestInit = { method, headers: this.headers, signal: AbortSignal.timeout(timeoutMs) };
         if (body !== undefined) {
             options.body = JSON.stringify(body);
         }
-        const res = await fetch(url, options);
-        const text = await res.text();
-        let parsed: unknown = undefined;
-        if (text) {
-            try {
-                parsed = JSON.parse(text);
-            } catch {
-                parsed = text;
+        await this.acquire();
+        try {
+            const res = await fetch(url, options);
+            const text = await res.text();
+            let parsed: unknown = undefined;
+            if (text) {
+                try {
+                    parsed = JSON.parse(text);
+                } catch {
+                    parsed = text;
+                }
             }
+            return { res, parsed, text };
+        } finally {
+            this.release();
         }
-        if (!res.ok) {
-            const msg =
-                parsed && typeof parsed === 'object' && 'message' in parsed
-                    ? String((parsed as { message: unknown }).message)
-                    : text || `HTTP ${res.status} ${res.statusText}`;
-            throw new Error(`Remnawave API error (${res.status} ${method} ${path}): ${msg}`);
-        }
-        return parsed as T;
     }
 
-    private get<T = unknown>(path: string, query?: Query) {
+    async request<T = unknown>(method: string, path: string, body?: unknown, query?: Query, opts: RequestOptions = {}): Promise<T> {
+        const idempotent = method === 'GET' || opts.idempotent === true;
+        const attempts = idempotent ? 4 : 1;
+        let lastErr: unknown;
+        for (let i = 0; i < attempts; i++) {
+            if (i > 0) await sleep(500 * 2 ** (i - 1) + Math.random() * 250);
+            let out;
+            try {
+                out = await this.once(method, path, body, query, opts.timeoutMs ?? this.timeoutMs);
+            } catch (e) {
+                // network error or timeout: nothing reached us, repeat if safe
+                const why = e instanceof Error ? (e.name === 'TimeoutError' ? 'timeout' : e.message) : String(e);
+                lastErr = new Error(`Remnawave API unreachable (${method} ${path}): ${why}${idempotent ? ` after ${i + 1} attempt(s)` : ''}`);
+                continue;
+            }
+            const { res, parsed, text } = out;
+            if (res.ok) {
+                if (method !== 'GET') for (const fn of this.writeListeners) fn(method, path);
+                return parsed as T;
+            }
+            const o = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+            const err = new RemnawaveApiError(
+                res.status,
+                method,
+                path,
+                typeof o.message === 'string' ? o.message : text.slice(0, 300) || `HTTP ${res.status} ${res.statusText}`,
+                typeof o.errorCode === 'string' ? o.errorCode : undefined,
+                formatIssues(o.errors),
+            );
+            if (!RETRY_STATUS.has(res.status)) throw err;
+            lastErr = err;
+        }
+        throw lastErr;
+    }
+
+    get<T = unknown>(path: string, query?: Query) {
         return this.request<T>('GET', path, undefined, query);
     }
     private post<T = unknown>(path: string, body?: unknown, query?: Query) {
         return this.request<T>('POST', path, body, query);
     }
+    /** PATCH endpoints of the panel replace the given fields wholesale, so repeating one is safe. */
     private patch<T = unknown>(path: string, body?: unknown) {
-        return this.request<T>('PATCH', path, body);
+        return this.request<T>('PATCH', path, body, undefined, { idempotent: true });
     }
     private put<T = unknown>(path: string, body?: unknown) {
-        return this.request<T>('PUT', path, body);
+        return this.request<T>('PUT', path, body, undefined, { idempotent: true });
     }
     private delete<T = unknown>(path: string, body?: unknown) {
         return this.request<T>('DELETE', path, body);
