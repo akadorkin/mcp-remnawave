@@ -58,5 +58,18 @@ export function registerSubscriptionTools(server: McpServer, client: RemnawaveCl
     server.tool('sub_templates_get', 'Get a subscription template by UUID', { uuid: z.string() }, ({ uuid }) =>
         run(() => client.getSubscriptionTemplate(uuid)),
     );
+    server.tool(
+        'sub_templates_update',
+        'Update a subscription template. Pass uuid and the fields to change; templateJson replaces the stored one. POST-create is a different endpoint and 409s on an existing name, so this PATCH is the only way to change a template in place.',
+        {
+            uuid: z.string(),
+            templateJson: z.record(z.unknown()).optional().describe('Full template object; replaces the stored one'),
+            encodedTemplateYaml: z.string().optional(),
+            name: z.string().optional(),
+            tags: z.array(z.string()).optional(),
+        },
+        (p) => run(() => client.updateSubscriptionTemplate(p)),
+    );
+
     server.tool('sub_settings_get', 'Get global subscription settings', {}, () => run(() => client.getSubscriptionSettings()));
 }
