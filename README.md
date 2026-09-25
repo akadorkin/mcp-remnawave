@@ -20,7 +20,7 @@ fleet-wide joins, compact output and safe, reviewable edits of big configs.
 | Panel | Remnawave 3.4.x |
 | Contract | `@remnawave/backend-contract` 3.4.x |
 | Runtime | Node.js 22+ |
-| Tools | 200 (95 in read-only mode) — [full list](docs/TOOLS.md) |
+| Tools | 201 (95 in read-only mode) — [full list](docs/TOOLS.md) |
 
 ## Why 3.0
 

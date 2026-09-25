@@ -404,6 +404,11 @@ export class FleetIndex {
         };
     }
 
+    /** Every host (any state) that points at a template; hosts without one use the XRAY_JSON "Default". */
+    hostsUsingTemplate(tpl: TemplateMeta, defaultTplUuid?: string): Host[] {
+        return this.hostsSorted.filter((h) => h.xrayJsonTemplateUuid === tpl.uuid || (!h.xrayJsonTemplateUuid && defaultTplUuid === tpl.uuid));
+    }
+
     /** Visible (non-hidden, enabled) hosts that render a given template, i.e. the "locations" using it. */
     recipientsOf(tpl: TemplateMeta, defaultTplUuid?: string): Host[] {
         return this.hostsSorted.filter(

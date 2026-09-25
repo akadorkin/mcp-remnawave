@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Any, FleetIndex, InjectEntry, injectEntries, routingIssues, Template, TemplateMeta } from '../core/fleet.js';
 import { allPools } from '../core/hostops.js';
 import { applyOps, resolve } from '../core/jsonedit.js';
-import { applyParams, Ctx, PlanTarget, runPlan } from '../core/plan.js';
+import { applyParams, Ctx, journaled, PlanTarget, runPlan } from '../core/plan.js';
 import { xraySummary } from '../core/views.js';
 import { run } from './helpers.js';
 import { OPS_HELP, opSchema, toOps } from './inbounds.js';
@@ -221,7 +221,7 @@ export function registerSubscriptionTools(server: McpServer, ctx: Ctx) {
 
     server.tool(
         'pools_audit',
-        'Audit every template\'s pools the way the panel resolves them: empty pools, uuids pointing to deleted/disabled hosts, broken regexes, balancer selectors / fallbackTags / rule outbounds that point to nothing, templates no visible host uses.',
+        'Audit every template\'s pools the way the panel resolves them: empty pools, uuids pointing to deleted/disabled hosts, broken regexes, balancer selectors / fallbackTags / rule outbounds that point to nothing. Issues are reported for templates that visible hosts render; templates referenced only by hidden hosts, and orphans no host references at all, are listed separately.',
         {
             templates: z.array(z.string()).optional(),
             onlyIssues: z.boolean().default(true),
@@ -234,21 +234,27 @@ export function registerSubscriptionTools(server: McpServer, ctx: Ctx) {
                     const pools = allPools(idx, [t]);
                     const issues = routingIssues(t, pools);
                     const skippedRefs = pools.flatMap((p) => p.skipped.map((s) => `#${p.index}: ${s.remark} (${s.why})`));
-                    const users = idx.recipientsOf(t, def).filter((h) => !h.isHidden);
+                    const refs = idx.hostsUsingTemplate(t, def);
+                    const visible = refs.filter((h) => !h.isDisabled && !h.isHidden).length;
+                    const hidden = refs.filter((h) => !h.isDisabled && h.isHidden).length;
+                    const status = visible ? 'in use' : refs.length ? (hidden ? 'hidden hosts only' : 'disabled hosts only') : 'orphan';
                     return {
                         template: t.name,
-                        locations: users.length,
+                        status,
+                        hosts: { visible, hidden, disabled: refs.length - visible - hidden },
                         pools: pools.map((p) => `#${p.index} ${p.selector} → ${p.members.length} (${p.members[0]?.remark ?? '—'})`),
                         ...(issues.length ? { issues } : {}),
                         ...(skippedRefs.length ? { skippedRefs } : {}),
-                        ...(!users.length ? { unused: true } : {}),
                     };
                 });
-                const withIssues = rows.filter((r) => r.issues || r.skippedRefs);
+                const live = rows.filter((r) => r.status === 'in use');
+                const withIssues = live.filter((r) => r.issues || r.skippedRefs);
                 return {
                     templates: rows.length,
+                    inUse: live.length,
                     withIssues: withIssues.length,
-                    unused: rows.filter((r) => r.unused).map((r) => r.template),
+                    hiddenOnly: rows.filter((r) => r.status === 'hidden hosts only' || r.status === 'disabled hosts only').map((r) => `${r.template} (${r.hosts.hidden} hidden, ${r.hosts.disabled} disabled)`),
+                    orphans: rows.filter((r) => r.status === 'orphan').map((r) => r.template),
                     rows: onlyIssues ? withIssues : rows,
                 };
             }),
@@ -323,6 +329,51 @@ ${OPS_HELP}`,
                     return [templateTarget(ctx, idx, t, after, idx.recipientsOf(t, def).length)];
                 }),
             ),
+    );
+
+    server.tool(
+        'sub_templates_delete',
+        'Delete subscription templates. Refuses any template a host still points at (any state) and the XRAY_JSON "Default" unless force. Each template is backed up first (backup_restore cannot recreate a deleted template; the backup keeps its JSON). Call without confirmNames to see what would go.',
+        {
+            templates: z.array(z.string()).min(1).describe('Template names/uuids'),
+            confirmNames: z.array(z.string()).optional().describe('Exactly the same template names, to actually delete'),
+            force: z.boolean().default(false),
+        },
+        ({ templates, confirmNames, force }) =>
+            run(async () => {
+                const [idx, def] = await Promise.all([fleet.index(true), defaultTplUuid(ctx)]);
+                const metas = await Promise.all(templates.map((r) => fleet.findTemplate(r)));
+                const plan = metas.map((m) => {
+                    const refs = idx.hostsUsingTemplate(m, def);
+                    const blockers = [
+                        ...(m.uuid === def ? ['it is the XRAY_JSON Default (hosts without a template use it)'] : []),
+                        ...(refs.length ? [`${refs.length} host(s) point at it (${refs.filter((h) => !h.isDisabled && !h.isHidden).length} visible)`] : []),
+                    ];
+                    return { name: m.name, type: m.templateType, uuid: m.uuid, blockers };
+                });
+                const blocked = plan.filter((p) => p.blockers.length);
+                const names = plan.map((p) => p.name).sort();
+                const confirmed = confirmNames && JSON.stringify([...confirmNames].sort()) === JSON.stringify(names);
+                if (!confirmed || (blocked.length && !force)) {
+                    return {
+                        deleted: false,
+                        plan,
+                        next: blocked.length && !force ? 'Some templates are still referenced; fix that first or pass force:true.' : `Repeat with confirmNames: ${JSON.stringify(names)}`,
+                    };
+                }
+                const done: Array<Record<string, unknown>> = [];
+                for (const m of metas) {
+                    const full = await fleet.template(m.uuid, true);
+                    const { backup } = await journaled(ctx, 'sub_templates_delete', `template ${m.name} (${m.templateType})`, 'delete', () => client.deleteSubscriptionTemplate(m.uuid), {
+                        kind: 'sub-template',
+                        uuid: m.uuid,
+                        name: `${m.name}-deleted`,
+                        data: full,
+                    });
+                    done.push({ template: m.name, backup });
+                }
+                return { deleted: done.length, done };
+            }),
     );
 
     server.tool(

@@ -435,6 +435,9 @@ export class RemnawaveClient {
     updateSubscriptionTemplate(params: Params) {
         return this.patch(REST_API.SUBSCRIPTION_TEMPLATE.UPDATE, params);
     }
+    deleteSubscriptionTemplate(uuid: string) {
+        return this.delete(REST_API.SUBSCRIPTION_TEMPLATE.DELETE(uuid));
+    }
     getSubscriptionSettings() {
         return this.get(REST_API.SUBSCRIPTION_SETTINGS.GET);
     }
