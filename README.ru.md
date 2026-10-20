@@ -7,6 +7,12 @@
 </p>
 <p align="center"><sub>изображение certified-ai-bullshit принадлежит <a href="https://github.com/vas3k">vas3k</a></sub></p>
 
+> **Это форк** проекта [TrackLine/mcp-remnawave](https://github.com/TrackLine/mcp-remnawave)
+> (Max Shalenkov и соавторы: Daniil Isakov, Ward, Mikhail / mitetenov). Их версии 1.x–2.x — основа репозитория,
+> история коммитов сохранена. Версия 3.0 — переработка поверх неё ([akadorkin](https://github.com/akadorkin)).
+> С октября 2026 исходный проект закрыт, его README отсылает к
+> [3APA3A-3AHO3A/remnawave-mcp](https://github.com/3APA3A-3AHO3A/remnawave-mcp).
+
 MCP-сервер для панели [Remnawave](https://github.com/remnawave/). Даёт LLM-клиенту (Claude Code, Claude Desktop,
 Cursor…) весь API панели и то, что через голый API делать мучительно: сводки по всему флоту, компактный вывод
 и безопасную, проверяемую правку больших конфигов.
@@ -111,8 +117,8 @@ claude mcp add remnawave -s user \
 
 ```json
 {
-  "profile": "eu-ingress",
-  "ops": [{ "op": "replace", "path": "/outbounds[tag=relay-out]/settings/vnext/0/address", "value": "10.0.0.2" }]
+  "profile": "edge-profile",
+  "ops": [{ "op": "replace", "path": "/outbounds[tag=relay-out]/settings/vnext/0/address", "value": "198.51.100.10" }]
 }
 ```
 
@@ -132,8 +138,16 @@ src/
   prompts/     сценарии-подсказки
 ```
 
-Исходный проект: [TrackLine/mcp-remnawave](https://github.com/TrackLine/mcp-remnawave) (1.x, панель 2.x).
+## Авторы
+
+- Исходный проект: [TrackLine/mcp-remnawave](https://github.com/TrackLine/mcp-remnawave) (1.x–2.x, панель 2.x) —
+  Max Shalenkov, вклад Daniil Isakov, Ward и Mikhail (mitetenov).
+- Добавлено в форке (3.x, панель 3.4): переписано под контракт 3.4, компактный вывод и маскировка секретов,
+  связки по флоту (`fleet_overview`, `inbound_trace`, `host_usage`, `pools_audit`, `config_search`),
+  движок правок JSON с dry-run → `planHash` → apply, бэкапы / журнал / `backup_restore`,
+  правка пулов и массовая правка хостов, рендер подписки под клиентов, ссылки по именам.
 
 ## Лицензия
 
-MIT
+MIT — так указано в `package.json` с первого коммита исходного проекта. Отдельного файла LICENSE
+в исходном проекте нет, поэтому здесь он тоже не добавлен.

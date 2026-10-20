@@ -7,6 +7,13 @@
 </p>
 <p align="center"><sub>Badge image by <a href="https://github.com/vas3k">vas3k</a></sub></p>
 
+> **This is a fork** of [TrackLine/mcp-remnawave](https://github.com/TrackLine/mcp-remnawave)
+> by Max Shalenkov and contributors (Daniil Isakov, Ward, Mikhail / mitetenov). Their 1.x–2.x work — the
+> one-to-one API mapping, read-only mode, `X-Api-Key` and Cloudflare Access support, the schema fixes — is
+> the base of this repository and its git history is kept as is. Version 3.0 (below) is a rewrite on top of it
+> by [akadorkin](https://github.com/akadorkin). As of October 2026 the upstream README marks that project
+> as closed and points to [3APA3A-3AHO3A/remnawave-mcp](https://github.com/3APA3A-3AHO3A/remnawave-mcp).
+
 MCP server for the [Remnawave](https://github.com/remnawave/) panel. It gives an LLM client
 (Claude Code, Claude Desktop, Cursor…) the whole panel API plus the things the raw API makes painful:
 fleet-wide joins, compact output and safe, reviewable edits of big configs.
@@ -111,8 +118,8 @@ Operations: `replace`, `set`, `add`, `remove`, `test`, `move`, `copy`, `merge`, 
 
 ```json
 {
-  "profile": "eu-ingress",
-  "ops": [{ "op": "replace", "path": "/outbounds[tag=relay-out]/settings/vnext/0/address", "value": "10.0.0.2" }]
+  "profile": "edge-profile",
+  "ops": [{ "op": "replace", "path": "/outbounds[tag=relay-out]/settings/vnext/0/address", "value": "198.51.100.10" }]
 }
 ```
 
@@ -132,8 +139,16 @@ src/
   prompts/     guided workflows
 ```
 
-Upstream: [TrackLine/mcp-remnawave](https://github.com/TrackLine/mcp-remnawave) (1.x, panel 2.x).
+## Credits
+
+- Upstream: [TrackLine/mcp-remnawave](https://github.com/TrackLine/mcp-remnawave) (1.x–2.x, panel 2.x) —
+  Max Shalenkov, with contributions from Daniil Isakov, Ward and Mikhail (mitetenov).
+- Added in this fork (3.x, panel 3.4): rewrite for the 3.4 contract, compact views and secret masking,
+  fleet joins (`fleet_overview`, `inbound_trace`, `host_usage`, `pools_audit`, `config_search`),
+  the JSON edit engine with dry-run → `planHash` → apply, backups / journal / `backup_restore`,
+  pool and bulk host editing, subscription rendering per client, name-based references.
 
 ## License
 
-MIT
+MIT, as declared in `package.json` since the upstream's first commit. The upstream repository ships no
+separate LICENSE file, so none is added here either.

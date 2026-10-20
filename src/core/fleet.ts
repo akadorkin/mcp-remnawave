@@ -258,7 +258,7 @@ export class FleetIndex {
         const low = ref.toLowerCase();
         const exact = this.nodes.filter((n) => n.name.toLowerCase() === low);
         if (exact.length === 1) return exact[0];
-        // "de2" → "de-hetzner-de2": match on the last dash-separated part
+        // "de2" → "exit-de-de2": match on the last dash-separated part
         const tail = this.nodes.filter((n) => n.name.toLowerCase().split('-').pop() === low);
         if (tail.length === 1) return tail[0];
         const sub = this.nodes.filter((n) => n.name.toLowerCase().includes(low));
