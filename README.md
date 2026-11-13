@@ -79,6 +79,7 @@ Other clients: run `node dist/index.js` over stdio with the same environment.
 | `REMNAWAVE_READONLY` | | `false` | `true` registers only reading tools |
 | `REMNAWAVE_STATE_DIR` | | `~/.local/state/remnawave-mcp` | Backups, journal, oversized outputs, subscription snapshots |
 | `REMNAWAVE_MAX_OUTPUT_CHARS` | | `40000` | Larger results go to a file |
+| `REMNAWAVE_SCRATCH_KEEP_DAYS` | | `14` | Saved outputs and subscription snapshots older than this are removed at startup (`0` keeps all); backups and the journal are never pruned |
 | `REMNAWAVE_REDACT_KEYS` | | `privateKey,mldsa65Seed` | Keys masked in every output |
 | `REMNAWAVE_TIMEOUT_MS` | | `60000` | Per-request timeout |
 | `REMNAWAVE_SUB_BASE_URL` | | `<base>/api/sub` | Prefix for public subscription URLs |

@@ -26,6 +26,33 @@ export interface JournalEntry {
 }
 
 /**
+ * Drop saved tool outputs and fetched subscriptions older than keepDays (they hold
+ * client keys and are only useful right after the call). Backups and the journal stay.
+ */
+export function pruneScratch(stateDir: string, keepDays: number): number {
+    if (!(keepDays > 0)) return 0;
+    const cutoff = Date.now() - keepDays * 86_400_000;
+    let removed = 0;
+    for (const sub of ['out', 'subs']) {
+        const dir = path.join(stateDir, sub);
+        if (!fs.existsSync(dir)) continue;
+        for (const f of fs.readdirSync(dir)) {
+            const file = path.join(dir, f);
+            try {
+                const st = fs.statSync(file);
+                if (st.isFile() && st.mtimeMs < cutoff) {
+                    fs.unlinkSync(file);
+                    removed++;
+                }
+            } catch {
+                // another session's server may have removed it first
+            }
+        }
+    }
+    return removed;
+}
+
+/**
  * Backups and the write journal. Every tool that changes the panel takes a
  * backup of the object it is about to overwrite and appends a journal line,
  * so any change made through this server can be looked up and rolled back

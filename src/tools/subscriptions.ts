@@ -80,6 +80,24 @@ export function templateTarget(ctx: Ctx, idx: FleetIndex, t: Template, after: An
     };
 }
 
+const isObj = (v: unknown): v is Any => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Top-level patch for subscription settings: object fields merge into the stored value, the rest replaces it. */
+export function mergeSettings(cur: Any, set: Any): Any {
+    const patch: Any = {};
+    for (const [k, v] of Object.entries(set)) {
+        if (['uuid', 'createdAt', 'updatedAt'].includes(k)) throw new Error(`${k} cannot be set`);
+        if (!(k in cur)) throw new Error(`unknown settings field "${k}" (known: ${Object.keys(cur).join(', ')})`);
+        if (isObj(v) && isObj(cur[k])) {
+            const merged = { ...cur[k], ...v };
+            // the panel stores header values as strings, so null can only mean "remove"
+            if (k === 'customResponseHeaders') for (const h of Object.keys(merged)) if (merged[h] === null) delete merged[h];
+            patch[k] = merged;
+        } else patch[k] = v;
+    }
+    return patch;
+}
+
 async function selectTemplates(ctx: Ctx, sel: { templates?: string[]; nameRegex?: string; type?: string }): Promise<Template[]> {
     if (!sel.templates?.length && !sel.nameRegex && !sel.type) throw new Error('select templates with templates, nameRegex or type');
     const list = await ctx.fleet.templateList();
@@ -306,6 +324,55 @@ ${OPS_HELP}`,
                     return targets;
                 }),
             ),
+    );
+
+    server.tool(
+        'sub_settings_update',
+        'Edit global subscription settings. `set` holds top-level fields; object fields (customResponseHeaders, customRemarks, hwidSettings, responseRules) are merged key by key with the stored value, so one header can change without resending the rest; a null key inside customResponseHeaders removes that header. Arrays and scalars are replaced. Dry run by default; apply with the planHash. The previous settings are backed up (restore by passing the backup\'s data back through `set`).',
+        {
+            set: z.record(z.unknown()).describe('e.g. {"customResponseHeaders":{"announce":"…","old-header":null},"hwidSettings":{"fallbackDeviceLimit":20}}'),
+            ...applyParams,
+        },
+        (p) =>
+            run(() =>
+                runPlan(ctx, 'sub_settings_update', p, async () => {
+                    const strip = (s: Any) => {
+                        const { uuid: _u, createdAt: _c, updatedAt: _m, ...rest } = s;
+                        return rest as Any;
+                    };
+                    const cur = ((await client.getSubscriptionSettings()) as Any).response as Any;
+                    const before = strip(cur);
+                    const patch = mergeSettings(before, p.set as Any);
+                    return [
+                        {
+                            kind: 'other',
+                            uuid: cur.uuid,
+                            name: 'subscription-settings',
+                            backup: cur,
+                            before,
+                            after: { ...before, ...patch },
+                            write: () => client.updateSubscriptionSettings({ uuid: cur.uuid, ...patch }),
+                            readBack: async () => strip(((await client.getSubscriptionSettings()) as Any).response),
+                        },
+                    ];
+                }),
+            ),
+    );
+
+    server.tool(
+        'sub_templates_create',
+        'Create an empty subscription template of the given type (the panel fills it with its default body). Edit it afterwards with sub_template_patch / sub_templates_update; remove with sub_templates_delete.',
+        {
+            name: z.string().min(2).max(255),
+            templateType: z.enum(['XRAY_JSON', 'XRAY_BASE64', 'MIHOMO', 'STASH', 'CLASH', 'SINGBOX']),
+        },
+        ({ name, templateType }) =>
+            run(async () => {
+                const { result } = await journaled(ctx, 'sub_templates_create', `template ${name} (${templateType})`, 'create', () => client.createSubscriptionTemplate({ name, templateType }));
+                fleet.invalidateBase();
+                const r = (result as Any)?.response ?? {};
+                return { created: true, uuid: r.uuid, name: r.name, templateType: r.templateType };
+            }),
     );
 
     server.tool(

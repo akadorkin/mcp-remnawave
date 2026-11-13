@@ -21,7 +21,7 @@ const GROUPS = [
     ['Fleet views', (n) => ['fleet_overview', 'inbound_trace', 'host_usage', 'config_search', 'pools_audit'].includes(n)],
     ['Change safety', (n) => ['journal_list', 'backups_list', 'backup_restore', 'api_request'].includes(n)],
     ['Config profiles & inbounds', (n) => n.startsWith('config_profile') || n === 'inbounds_list'],
-    ['Subscription templates & pools', (n) => n.startsWith('sub_template') || n === 'pools_edit' || n === 'sub_settings_get'],
+    ['Subscription templates & pools', (n) => n.startsWith('sub_template') || n === 'pools_edit' || n.startsWith('sub_settings_')],
     ['Subscriptions', (n) => n.startsWith('subscription')],
     ['Nodes', (n) => n.startsWith('nodes_') || n === 'node_inbounds_edit'],
     ['Hosts', (n) => n.startsWith('hosts_')],

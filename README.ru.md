@@ -78,6 +78,7 @@ claude mcp add remnawave -s user \
 | `REMNAWAVE_READONLY` | | `false` | `true` — только читающие инструменты |
 | `REMNAWAVE_STATE_DIR` | | `~/.local/state/remnawave-mcp` | Бэкапы, журнал, большие ответы, снимки подписок |
 | `REMNAWAVE_MAX_OUTPUT_CHARS` | | `40000` | Больше — в файл |
+| `REMNAWAVE_SCRATCH_KEEP_DAYS` | | `14` | Большие ответы и снимки подписок старше этого срока удаляются при старте (`0` — хранить всё); бэкапы и журнал не чистятся |
 | `REMNAWAVE_REDACT_KEYS` | | `privateKey,mldsa65Seed` | Какие ключи маскировать в выводе |
 | `REMNAWAVE_TIMEOUT_MS` | | `60000` | Таймаут запроса |
 | `REMNAWAVE_SUB_BASE_URL` | | `<base>/api/sub` | Префикс публичных ссылок подписки |

@@ -4,7 +4,7 @@ import { Config } from './config.js';
 import { Fleet } from './core/fleet.js';
 import { Output } from './core/output.js';
 import { Ctx } from './core/plan.js';
-import { StateStore } from './core/state.js';
+import { pruneScratch, StateStore } from './core/state.js';
 import { registerAllTools } from './tools/index.js';
 import { instrument } from './tools/helpers.js';
 import { registerAllResources } from './resources/index.js';
@@ -29,6 +29,7 @@ export function createServer(config: Config): McpServer {
     const out = new Output(config);
     const ctx: Ctx = { client, fleet: new Fleet(client), out, state: new StateStore(config), config };
 
+    pruneScratch(config.stateDir, config.scratchKeepDays);
     instrument(server, out);
     registerAllTools(server, ctx);
     registerAllResources(server, ctx);

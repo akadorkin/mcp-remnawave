@@ -12,6 +12,8 @@ export interface Config {
     stateDir: string;
     /** Tool output larger than this many characters is written to a file instead. */
     maxOutputChars: number;
+    /** Files in stateDir/out and stateDir/subs older than this are removed at startup. */
+    scratchKeepDays: number;
     /** Object keys whose values are masked in every tool output. */
     redactKeys: string[];
     /** Per-request timeout for panel calls, ms. */
@@ -48,6 +50,8 @@ export function loadConfig(): Config {
         readonly: env.REMNAWAVE_READONLY === 'true',
         stateDir: env.REMNAWAVE_STATE_DIR || path.join(stateHome, 'remnawave-mcp'),
         maxOutputChars: Number(env.REMNAWAVE_MAX_OUTPUT_CHARS) || 40000,
+        // 0 keeps everything
+        scratchKeepDays: env.REMNAWAVE_SCRATCH_KEEP_DAYS === undefined ? 14 : Number(env.REMNAWAVE_SCRATCH_KEEP_DAYS),
         redactKeys:
             redact === undefined
                 ? DEFAULT_REDACT
